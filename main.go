@@ -11,9 +11,14 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
+	"net/http"
 	"os"
 	"os/exec"
 	"regexp"
+	"text/template"
+
+	"github.com/pkg/browser"
 )
 
 var subprocessDone = make(chan struct{})
@@ -59,7 +64,49 @@ type gctrace struct {
 	NSleep      int
 }
 
-func startParser(r io.Reader) {
+type graphPoints [2]int
+
+var graphData []graphPoints
+
+func index(w http.ResponseWriter, req *http.Request) {
+	visTmpl.Execute(w, struct {
+		YMin         int
+		GraphData    []graphPoints
+	}{
+		10,
+		graphData,
+	})
+
+}
+
+var visTmpl = template.Must(template.New("vis").Parse(`
+<html>
+<script src="//cdnjs.cloudflare.com/ajax/libs/jquery/2.0.3/jquery.min.js"></script>
+<script src="//cdnjs.cloudflare.com/ajax/libs/flot/0.8.2/jquery.flot.min.js"></script>
+
+<script type="text/javascript">
+
+    var data = {{ .GraphData }};
+
+    $(document).ready(function() {
+        $.plot($("#placeholder"), [data], {
+             yaxis: { min: {{ .YMin }} },
+             grid: {
+              }
+           })
+        })
+
+</script>
+
+<body>
+
+<div id="placeholder" style="width:1200px; height:400px"></div>
+
+</body>
+</html>
+`))
+
+func startParser(r io.Reader, trace chan *gctrace) {
 	var re = regexp.MustCompile(`gc\d+\(\d+\): \d+\+\d+\+\d+\+\d+ us, \d+ -> \d+ MB, \d+ \(\d+-\d+\) objects, \d+\/\d+\/\d+ sweeps, \d+\(\d+\) handoff, \d+\(\d+\) steal, \d+\/\d+\/\d+ yields`)
 
 	defer close(parserDone)
@@ -76,7 +123,9 @@ func startParser(r io.Reader) {
 			&gc.NSpan, &gc.NBGSweep, &gc.NPauseSweep, &gc.NHandoff, &gc.NHandoffCnt, &gc.NSteal, &gc.NStealCnt, &gc.NProcYield, &gc.NOsYield, &gc.NSleep)
 		if err != nil {
 			log.Printf("corrupt gctrace: %v: %s", err, line)
+			continue
 		}
+		trace <- &gc
 
 	}
 	if err := sc.Err(); err != nil {
@@ -89,9 +138,25 @@ func main() {
 		log.Fatalf("usage: %s command <args>...", os.Args[0])
 	}
 	pr, pw, _ := os.Pipe()
+	trace := make(chan *gctrace, 1)
 
 	go startSubprocess(pw)
-	go startParser(pr)
+	go startParser(pr, trace)
+
+
+	l, err := net.Listen("tcp4", "127.0.0.1:0")
+	if err != nil {
+		log.Fatal(err)
+	}
+	http.HandleFunc("/", index)
+	go http.Serve(l, nil)
+
+	addr := l.Addr()
+	browser.OpenURL(fmt.Sprintf("http://%s/", addr))
+
+	for t := range trace {
+		graphData = append(graphData, graphPoints{t.NumGC, t.Heap0})
+	}
 
 	<-parserDone
 	<-subprocessDone
