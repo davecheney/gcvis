@@ -9,6 +9,7 @@ package main
 import (
 	"bufio"
 	"fmt"
+	"html/template"
 	"io"
 	"log"
 	"net"
@@ -16,7 +17,8 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
-	"text/template"
+	"strings"
+	"time"
 
 	"github.com/pkg/browser"
 )
@@ -66,15 +68,14 @@ type gctrace struct {
 
 type graphPoints [2]int
 
-var graphData []graphPoints
+var heap0, heap1, nmalloc, nfree, nobj []graphPoints
 
 func index(w http.ResponseWriter, req *http.Request) {
 	visTmpl.Execute(w, struct {
-		YMin         int
-		GraphData    []graphPoints
+		Heap0, Heap1, NMalloc, NFree, NObj []graphPoints
+		Title                              string
 	}{
-		10,
-		graphData,
+		heap0, heap1, nmalloc, nfree, nobj, strings.Join(os.Args[1:], " "),
 	})
 
 }
@@ -83,23 +84,31 @@ var visTmpl = template.Must(template.New("vis").Parse(`
 <html>
 <script src="//cdnjs.cloudflare.com/ajax/libs/jquery/2.0.3/jquery.min.js"></script>
 <script src="//cdnjs.cloudflare.com/ajax/libs/flot/0.8.2/jquery.flot.min.js"></script>
+<script src="//cdnjs.cloudflare.com/ajax/libs/flot/0.8.2/jquery.flot.time.min.js"></script>
 
 <script type="text/javascript">
 
-    var data = {{ .GraphData }};
+    var data = [
+//	{ label: "gc.nmalloc", data: {{ .NMalloc }} },
+//	{ label: "gc.nfree", data: {{ .NFree }} },
+    	{ label: "gc.Heap0", data: {{ .Heap0 }} },
+	{ label: "gc.Heap1", data: {{ .Heap1 }} },
+	{ label: "gc.nobj", data: {{ .NObj }} },
+	]
 
     $(document).ready(function() {
-        $.plot($("#placeholder"), [data], {
-             yaxis: { min: {{ .YMin }} },
-             grid: {
-              }
+        $.plot($("#placeholder"), data, {
+		xaxis: {
+    			mode: "time",
+    			timeformat: "%I:%M:%S "
+		},
            })
         })
 
 </script>
 
 <body>
-
+<pre>{{ .Title }}</pre>
 <div id="placeholder" style="width:1200px; height:400px"></div>
 
 </body>
@@ -115,6 +124,7 @@ func startParser(r io.Reader, trace chan *gctrace) {
 	for sc.Scan() {
 		line := sc.Text()
 		if !re.MatchString(line) {
+			fmt.Println(line)
 			continue
 		}
 		var gc gctrace
@@ -143,7 +153,6 @@ func main() {
 	go startSubprocess(pw)
 	go startParser(pr, trace)
 
-
 	l, err := net.Listen("tcp4", "127.0.0.1:0")
 	if err != nil {
 		log.Fatal(err)
@@ -155,7 +164,12 @@ func main() {
 	browser.OpenURL(fmt.Sprintf("http://%s/", addr))
 
 	for t := range trace {
-		graphData = append(graphData, graphPoints{t.NumGC, t.Heap0})
+		ts := int(time.Now().UnixNano() / 1e6)
+		heap0 = append(heap0, graphPoints{ts, t.Heap0})
+		heap1 = append(heap1, graphPoints{ts, t.Heap1})
+		nmalloc = append(nmalloc, graphPoints{ts, t.NMalloc})
+		nfree = append(nmalloc, graphPoints{ts, t.NFree})
+		nobj = append(nobj, graphPoints{ts, t.Obj})
 	}
 
 	<-parserDone
