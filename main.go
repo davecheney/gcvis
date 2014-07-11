@@ -130,6 +130,7 @@ var visTmpl = template.Must(template.New("vis").Parse(`
 	var plot = $.plot("#placeholder", data, options);
 
 	var overview = $.plot("#overview", data, {
+		legend: { show: false},
 		series: {
 			lines: {
 				show: true,
