@@ -18,16 +18,13 @@ import (
 	"os/exec"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/pkg/browser"
 )
 
-var subprocessDone = make(chan struct{})
-var parserDone = make(chan struct{})
-
 func startSubprocess(w io.Writer) {
-	defer close(subprocessDone)
 	env := os.Environ()
 	env = append(env, "GODEBUG=gctrace=1")
 	args := os.Args[1:]
@@ -66,11 +63,23 @@ type gctrace struct {
 	NSleep      int
 }
 
+type scvgtrace struct {
+	inuse    int
+	idle     int
+	sys      int
+	released int
+	consumed int
+}
+
 type graphPoints [2]int
 
 var heapuse, scvginuse, scvgidle, scvgsys, scvgreleased, scvgconsumed []graphPoints
 
+var mu sync.RWMutex
+
 func index(w http.ResponseWriter, req *http.Request) {
+	mu.RLock()
+	defer mu.RUnlock()
 	visTmpl.Execute(w, struct {
 		HeapUse, ScvgInuse, ScvgIdle, ScvgSys, ScvgReleased, ScvgConsumed []graphPoints
 		Title                                                             string
@@ -88,6 +97,8 @@ func index(w http.ResponseWriter, req *http.Request) {
 
 var visTmpl = template.Must(template.New("vis").Parse(`
 <html>
+<head>
+<title>gcvis - {{ .Title }}</title>
 <script src="//cdnjs.cloudflare.com/ajax/libs/jquery/2.0.3/jquery.min.js"></script>
 <script src="//cdnjs.cloudflare.com/ajax/libs/flot/0.8.2/jquery.flot.min.js"></script>
 <script src="//cdnjs.cloudflare.com/ajax/libs/flot/0.8.2/jquery.flot.time.min.js"></script>
@@ -113,18 +124,18 @@ var visTmpl = template.Must(template.New("vis").Parse(`
         })
 
 </script>
-
+</head>
 <body>
 <pre>{{ .Title }}</pre>
 <div id="placeholder" style="width:1200px; height:400px"></div>
 <pre><b>Legend</b>
 
 gc.heapinuse: heap in use after gc
-scvg.inuse: heap considered in use by the scavenger
-scvg.idle: heap considered unused by the scavenger
-scvg.sys: heap requested from the operating system
-scvg.released: heap returned to the operating system by the scavenger
-scvg.consumed: total heap size (should roughly match process VSS)
+scvg.inuse: virtual memory considered in use by the scavenger
+scvg.idle: virtual memory considered unused by the scavenger
+scvg.sys: virtual memory requested from the operating system (should aproximate VSS)
+scvg.released: virtual memory returned to the operating system by the scavenger
+scvg.consumed: virtual memory in use (should roughly match process RSS)
 </pre>
 </body>
 </html>
@@ -135,18 +146,7 @@ var (
 	scvgre = regexp.MustCompile(`scvg\d+: inuse: \d+, idle: \d+, sys: \d+, released: \d+, consumed: \d+ \(MB\)`)
 )
 
-type scvgtrace struct {
-	inuse    int
-	idle     int
-	sys      int
-	released int
-	consumed int
-}
-
 func startParser(r io.Reader, gcc chan *gctrace, scvgc chan *scvgtrace) {
-
-	defer close(parserDone)
-
 	sc := bufio.NewScanner(r)
 	for sc.Scan() {
 		line := sc.Text()
@@ -202,24 +202,26 @@ func main() {
 	http.HandleFunc("/", index)
 	go http.Serve(l, nil)
 
-	addr := l.Addr()
-	browser.OpenURL(fmt.Sprintf("http://%s/", addr))
+	url := fmt.Sprintf("http://%s/", l.Addr())
+	log.Printf("opening browser window, if this fails, navigate to %s", url)
+	browser.OpenURL(url)
 
 	for {
 		select {
 		case gc := <-gc:
+			mu.Lock()
 			ts := int(time.Now().UnixNano() / 1e6)
 			heapuse = append(heapuse, graphPoints{ts, gc.Heap1})
+			mu.Unlock()
 		case scvg := <-scvg:
+			mu.Lock()
 			ts := int(time.Now().UnixNano() / 1e6)
 			scvginuse = append(scvginuse, graphPoints{ts, scvg.inuse})
 			scvgidle = append(scvgidle, graphPoints{ts, scvg.idle})
 			scvgsys = append(scvgsys, graphPoints{ts, scvg.sys})
 			scvgreleased = append(scvgreleased, graphPoints{ts, scvg.released})
 			scvgconsumed = append(scvgconsumed, graphPoints{ts, scvg.consumed})
+			mu.Unlock()
 		}
 	}
-
-	<-parserDone
-	<-subprocessDone
 }
