@@ -127,113 +127,116 @@ var visIndexTmpl = template.Must(template.New("vis-index").Parse(`
 <script type="text/javascript">
 
 	var data = [
-        { label: "gc.heapinuse", data: {{ .HeapUse }} },
-        { label: "scvg.inuse", data: {{ .ScvgInuse }} },
-        { label: "scvg.idle", data: {{ .ScvgIdle }} },
-        { label: "scvg.sys", data: {{ .ScvgSys }} },
-        { label: "scvg.released", data: {{ .ScvgReleased }} },
-        { label: "scvg.consumed", data: {{ .ScvgConsumed }} }
-    ];
+		{ label: "gc.heapinuse", data: {{ .HeapUse }} },
+		{ label: "scvg.inuse", data: {{ .ScvgInuse }} },
+		{ label: "scvg.idle", data: {{ .ScvgIdle }} },
+		{ label: "scvg.sys", data: {{ .ScvgSys }} },
+		{ label: "scvg.released", data: {{ .ScvgReleased }} },
+		{ label: "scvg.consumed", data: {{ .ScvgConsumed }} }
+	];
 
-    $(document).ready(function() {
-        var id;
-        var options = {
-            xaxis: {
-                mode: "time",
-                timeformat: "%I:%M:%S "
-            },
-            selection: {
-                mode: "x"
-            },
-        };
-        var overviewOptions = {
-            legend: { show: false},
-            series: {
-                lines: {
-                    show: true,
-                    lineWidth: 1
-                },
-                shadowSize: 0
-            },
-            xaxis: {
-                ticks: [],
-                mode: "time"
-            },
-            yaxis: {
-                ticks: [],
-                min: 0,
-                autoscaleMargin: 0.1
-            },
-            selection: {
-                mode: "x"
-            }
-        };
+	$(document).ready(function() {
+		var id;
+		var options = {
+			xaxis: {
+				mode: "time",
+				timeformat: "%I:%M:%S "
+			},
+			selection: {
+				mode: "x"
+			},
+		};
+		var overviewOptions = {
+			legend: { show: false},
+			series: {
+				lines: {
+					show: true,
+					lineWidth: 1
+				},
+				shadowSize: 0
+			},
+			xaxis: {
+				ticks: [],
+				mode: "time"
+			},
+			yaxis: {
+				ticks: [],
+				min: 0,
+				autoscaleMargin: 0.1
+			},
+			selection: {
+				mode: "x"
+			}
+		};
 
-        var makePlot = function(data) {
-            return $.plot($("#placeholder"), data, options);
-        };
-        var makeOverview = function(data) {
-            var overview = $.plot("#overview", data, overviewOptions);
-        };
-        var bind = function() {
-            // now connect the two
-            $("#placeholder").bind("plotselected", function (event, ranges) {
-                // Stop the polling.
-                clearInterval(id);
-                // do the zooming
-                $.each(plot.getXAxes(), function(_, axis) {
-                    var opts = axis.options;
-                    opts.min = ranges.xaxis.from;
-                    opts.max = ranges.xaxis.to;
-                });
-                plot.setupGrid();
-                plot.draw();
-                plot.clearSelection();
-            });
+		var makePlot = function(data) {
+			return $.plot($("#placeholder"), data, options);
+		};
+		var makeOverview = function(data) {
+			return $.plot("#overview", data, overviewOptions);
+		};
+		var bind = function() {
+			// now connect the two
+			$("#placeholder").bind("plotselected", function (event, ranges) {
+				// Stop the polling.
+				clearInterval(id);
+				// do the zooming
+				$.each(plot.getXAxes(), function(_, axis) {
+					var opts = axis.options;
+					opts.min = ranges.xaxis.from;
+					opts.max = ranges.xaxis.to;
+				});
+				plot.setupGrid();
+				plot.draw();
+				plot.clearSelection();
 
-            // don't fire event on the overview to prevent eternal loop
-            overview.setSelection(ranges, true);
+				// don't fire event on the overview to prevent eternal loop
+				overview.setSelection(ranges, true);
+			});
 
-            $("#overview").bind("plotselected", function (event, ranges) {
-                plot.setSelection(ranges);
-            });
-        };
+			$("#overview").bind("plotselected", function (event, ranges) {
+				// Stop the polling
+				clearInterval(id);
 
-        var plot = makePlot(data);
-        var overview = makeOverview(data);
-        bind();
+				plot.setSelection(ranges);
+			});
+		};
 
-        $("#output-image").click(function() {
-            var canvas = plot.getCanvas();
-            var raw = canvas.toDataURL();
-            var image = raw.replace("image/png", "image/octet-stream");
-            document.location.href = image;
-        });
+		var plot = makePlot(data);
+		var overview = makeOverview(data);
+		bind();
 
-        function fetchData() {
-            $.ajax({
-                url: "/ajax",
-                type: "GET",
-                dataType: "json",
-                success: function(data) {
-                    plot = makePlot(data);
-                    overview = makeOverview(data);
-                    bind();
-                }
-            });
-        }
+		$("#output-image").click(function() {
+			var canvas = plot.getCanvas();
+			var raw = canvas.toDataURL();
+			var image = raw.replace("image/png", "image/octet-stream");
+			document.location.href = image;
+		});
 
-        var updateStarted = false;
-        $("#update-graph").click(function() {
-            if (updateStarted) {
-                clearInterval(id);
-                updateStarted = false;
-            } else {
-                id = setInterval(fetchData, 100);   
-                updateStarted = true;
-            }
-        });
-    });
+		function fetchData() {
+			$.ajax({
+				url: "/ajax",
+				type: "GET",
+				dataType: "json",
+				success: function(data) {
+					plot = makePlot(data);
+					overview = makeOverview(data);
+					bind();
+				}
+			});
+		}
+
+		var updateStarted = false;
+		$("#update-graph").click(function() {
+			if (updateStarted) {
+				clearInterval(id);
+				updateStarted = false;
+			} else {
+				id = setInterval(fetchData, 100);
+				updateStarted = true;
+			}
+		});
+	});
 </script>
 <style>
 #content {
