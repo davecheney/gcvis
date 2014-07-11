@@ -32,7 +32,7 @@ func startSubprocess(args []string, w io.Writer) {
 	cmd.Env = env
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
-	cmd.Stderr = w // os.Stderr
+	cmd.Stderr = w
 
 	if err := cmd.Run(); err != nil {
 		log.Fatal(err)
@@ -122,59 +122,169 @@ var visIndexTmpl = template.Must(template.New("vis-index").Parse(`
 <script src="//cdnjs.cloudflare.com/ajax/libs/jquery/2.0.3/jquery.min.js"></script>
 <script src="//cdnjs.cloudflare.com/ajax/libs/flot/0.8.2/jquery.flot.min.js"></script>
 <script src="//cdnjs.cloudflare.com/ajax/libs/flot/0.8.2/jquery.flot.time.min.js"></script>
+<script src="//cdnjs.cloudflare.com/ajax/libs/flot/0.8.2/jquery.flot.selection.min.js"></script>
 
 <script type="text/javascript">
 
 	var data = [
-		{ label: "gc.heapinuse", data: {{ .HeapUse }} },
-		{ label: "scvg.inuse", data: {{ .ScvgInuse }} },
-		{ label: "scvg.idle", data: {{ .ScvgIdle }} },
-		{ label: "scvg.sys", data: {{ .ScvgSys }} },
-		{ label: "scvg.released", data: {{ .ScvgReleased }} },
-		{ label: "scvg.consumed", data: {{ .ScvgConsumed }} }
-	]
+        { label: "gc.heapinuse", data: {{ .HeapUse }} },
+        { label: "scvg.inuse", data: {{ .ScvgInuse }} },
+        { label: "scvg.idle", data: {{ .ScvgIdle }} },
+        { label: "scvg.sys", data: {{ .ScvgSys }} },
+        { label: "scvg.released", data: {{ .ScvgReleased }} },
+        { label: "scvg.consumed", data: {{ .ScvgConsumed }} }
+    ];
 
-	$(document).ready(function() {
-		make = function(data) {
-			return $.plot($("#placeholder"), data, {
-				xaxis: {
-					mode: "time",
-					timeformat: "%I:%M:%S "
-				},
-			});
-		}
-		var plot = make(data);
+    $(document).ready(function() {
+        var id;
+        var options = {
+            xaxis: {
+                mode: "time",
+                timeformat: "%I:%M:%S "
+            },
+            selection: {
+                mode: "x"
+            },
+        };
+        var overviewOptions = {
+            legend: { show: false},
+            series: {
+                lines: {
+                    show: true,
+                    lineWidth: 1
+                },
+                shadowSize: 0
+            },
+            xaxis: {
+                ticks: [],
+                mode: "time"
+            },
+            yaxis: {
+                ticks: [],
+                min: 0,
+                autoscaleMargin: 0.1
+            },
+            selection: {
+                mode: "x"
+            }
+        };
 
-		$("#output-image").click(function() {
-			var canvas = plot.getCanvas();
-			var raw = canvas.toDataURL();
-			var image = raw.replace("image/png", "image/octet-stream");
-			document.location.href = image;
-		});
+        var makePlot = function(data) {
+            return $.plot($("#placeholder"), data, options);
+        };
+        var makeOverview = function(data) {
+            var overview = $.plot("#overview", data, overviewOptions);
+        };
+        var bind = function() {
+            // now connect the two
+            $("#placeholder").bind("plotselected", function (event, ranges) {
+                // Stop the polling.
+                clearInterval(id);
+                // do the zooming
+                $.each(plot.getXAxes(), function(_, axis) {
+                    var opts = axis.options;
+                    opts.min = ranges.xaxis.from;
+                    opts.max = ranges.xaxis.to;
+                });
+                plot.setupGrid();
+                plot.draw();
+                plot.clearSelection();
+            });
 
-		function fetchData() {
-			$.ajax({
-				url: "/ajax",
-				type: "GET",
-				dataType: "json",
-				success: function(data) {
-					plot = make(data)
-				}
-			});
-		}
+            // don't fire event on the overview to prevent eternal loop
+            overview.setSelection(ranges, true);
 
-		var id;
-		$("#update-graph").click(function() {
-			clearInterval(id)
-			id = setInterval(fetchData, 100);	
-		});
-	})
+            $("#overview").bind("plotselected", function (event, ranges) {
+                plot.setSelection(ranges);
+            });
+        };
 
+        var plot = makePlot(data);
+        var overview = makeOverview(data);
+        bind();
+
+        $("#output-image").click(function() {
+            var canvas = plot.getCanvas();
+            var raw = canvas.toDataURL();
+            var image = raw.replace("image/png", "image/octet-stream");
+            document.location.href = image;
+        });
+
+        function fetchData() {
+            $.ajax({
+                url: "/ajax",
+                type: "GET",
+                dataType: "json",
+                success: function(data) {
+                    plot = makePlot(data);
+                    overview = makeOverview(data);
+                    bind();
+                }
+            });
+        }
+
+        var updateStarted = false;
+        $("#update-graph").click(function() {
+            if (updateStarted) {
+                clearInterval(id);
+                updateStarted = false;
+            } else {
+                id = setInterval(fetchData, 100);   
+                updateStarted = true;
+            }
+        });
+    });
 </script>
+<style>
+#content {
+	margin: 0 auto;
+	padding: 10px;
+}
+
+.demo-container {
+	box-sizing: border-box;
+	width: 1200px;
+	height: 450px;
+	padding: 20px 15px 15px 15px;
+	margin: 15px auto 30px auto;
+	border: 1px solid #ddd;
+	background: #fff;
+	background: linear-gradient(#f6f6f6 0, #fff 50px);
+	background: -o-linear-gradient(#f6f6f6 0, #fff 50px);
+	background: -ms-linear-gradient(#f6f6f6 0, #fff 50px);
+	background: -moz-linear-gradient(#f6f6f6 0, #fff 50px);
+	background: -webkit-linear-gradient(#f6f6f6 0, #fff 50px);
+	box-shadow: 0 3px 10px rgba(0,0,0,0.15);
+	-o-box-shadow: 0 3px 10px rgba(0,0,0,0.1);
+	-ms-box-shadow: 0 3px 10px rgba(0,0,0,0.1);
+	-moz-box-shadow: 0 3px 10px rgba(0,0,0,0.1);
+	-webkit-box-shadow: 0 3px 10px rgba(0,0,0,0.1);
+}
+
+.demo-placeholder {
+	width: 100%;
+	height: 100%;
+	font-size: 14px;
+	line-height: 1.2em;
+}
+</style>
 </head>
 <body>
 <pre>{{ .Title }}</pre>
-<div id="placeholder" style="width:1200px; height:400px"></div>
+<div id="content">
+
+	<div class="demo-container">
+		<div id="placeholder" class="demo-placeholder"></div>
+	</div>
+
+	<div class="demo-container" style="height:150px;">
+		<div id="overview" class="demo-placeholder"></div>
+	</div>
+
+	<p>The smaller plot is linked to the main plot, so it acts as an overview. Try dragging a selection on either plot, and watch the behavior of the other.</p>
+
+</div>
+
 <pre><b>Legend</b>
 
 gc.heapinuse: heap in use after gc
