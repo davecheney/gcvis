@@ -115,13 +115,20 @@ var visTmpl = template.Must(template.New("vis").Parse(`
 	]
 
     $(document).ready(function() {
-        $.plot($("#placeholder"), data, {
-		xaxis: {
+        var plot = $.plot($("#placeholder"), data, {
+			xaxis: {
     			mode: "time",
     			timeformat: "%I:%M:%S "
-		},
-           })
-        })
+			},
+        });
+	
+		$("#output-image").click(function() {
+			var canvas = plot.getCanvas();
+			var raw = canvas.toDataURL();
+			var image = raw.replace("image/png", "image/octet-stream");
+			document.location.href = image;
+		});
+    })
 
 </script>
 </head>
@@ -137,6 +144,7 @@ scvg.sys: virtual memory requested from the operating system (should aproximate 
 scvg.released: virtual memory returned to the operating system by the scavenger
 scvg.consumed: virtual memory in use (should roughly match process RSS)
 </pre>
+<button id="output-image">Output Graph</button>
 </body>
 </html>
 `))
