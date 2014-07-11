@@ -3,11 +3,12 @@
 //
 // usage:
 //
-//     gcvis program [arguments]...
+//	 gcvis program [arguments]...
 package main
 
 import (
 	"bufio"
+	"encoding/json"
 	"fmt"
 	"html/template"
 	"io"
@@ -24,10 +25,9 @@ import (
 	"github.com/pkg/browser"
 )
 
-func startSubprocess(w io.Writer) {
+func startSubprocess(args []string, w io.Writer) {
 	env := os.Environ()
 	env = append(env, "GODEBUG=gctrace=1")
-	args := os.Args[1:]
 	cmd := exec.Command(args[0], args[1:]...)
 	cmd.Env = env
 	cmd.Stdin = os.Stdin
@@ -80,7 +80,7 @@ var mu sync.RWMutex
 func index(w http.ResponseWriter, req *http.Request) {
 	mu.RLock()
 	defer mu.RUnlock()
-	visTmpl.Execute(w, struct {
+	visIndexTmpl.Execute(w, struct {
 		HeapUse, ScvgInuse, ScvgIdle, ScvgSys, ScvgReleased, ScvgConsumed []graphPoints
 		Title                                                             string
 	}{
@@ -92,10 +92,30 @@ func index(w http.ResponseWriter, req *http.Request) {
 		ScvgConsumed: scvgconsumed,
 		Title:        strings.Join(os.Args[1:], " "),
 	})
-
 }
 
-var visTmpl = template.Must(template.New("vis").Parse(`
+func ajax(w http.ResponseWriter, req *http.Request) {
+	mu.RLock()
+	defer mu.RUnlock()
+	toJsonString := func(g []graphPoints) string {
+		j, _ := json.Marshal(g)
+		return string(j)
+	}
+	visAjaxTmpl.Execute(w, struct {
+		HeapUse, ScvgInuse, ScvgIdle, ScvgSys, ScvgReleased, ScvgConsumed string
+		Title                                                             string
+	}{
+		HeapUse:      toJsonString(heapuse),
+		ScvgInuse:    toJsonString(scvginuse),
+		ScvgIdle:     toJsonString(scvgidle),
+		ScvgSys:      toJsonString(scvgsys),
+		ScvgReleased: toJsonString(scvgreleased),
+		ScvgConsumed: toJsonString(scvgconsumed),
+		Title:        strings.Join(os.Args[1:], " "),
+	})
+}
+
+var visIndexTmpl = template.Must(template.New("vis-index").Parse(`
 <html>
 <head>
 <title>gcvis - {{ .Title }}</title>
@@ -107,73 +127,115 @@ var visTmpl = template.Must(template.New("vis").Parse(`
 <script type="text/javascript">
 
 	var data = [
-    		{ label: "gc.heapinuse", data: {{ .HeapUse }} },
-    		{ label: "scvg.inuse", data: {{ .ScvgInuse }} },
-    		{ label: "scvg.idle", data: {{ .ScvgIdle }} },
-    		{ label: "scvg.sys", data: {{ .ScvgSys }} },
-    		{ label: "scvg.released", data: {{ .ScvgReleased }} },
-    		{ label: "scvg.consumed", data: {{ .ScvgConsumed }} },
+		{ label: "gc.heapinuse", data: {{ .HeapUse }} },
+		{ label: "scvg.inuse", data: {{ .ScvgInuse }} },
+		{ label: "scvg.idle", data: {{ .ScvgIdle }} },
+		{ label: "scvg.sys", data: {{ .ScvgSys }} },
+		{ label: "scvg.released", data: {{ .ScvgReleased }} },
+		{ label: "scvg.consumed", data: {{ .ScvgConsumed }} }
 	];
 
-	var options = {
-		xaxis: {
-			mode: "time",
-			timeformat: "%I:%M:%S "
-		},
-		selection: {
-			mode: "x"
-		},
-	};
-
 	$(document).ready(function() {
-
-	var plot = $.plot("#placeholder", data, options);
-
-	var overview = $.plot("#overview", data, {
-		legend: { show: false},
-		series: {
-			lines: {
-				show: true,
-				lineWidth: 1
+		var id;
+		var options = {
+			xaxis: {
+				mode: "time",
+				timeformat: "%I:%M:%S "
 			},
-			shadowSize: 0
-		},
-		xaxis: {
-			ticks: [],
-			mode: "time"
-		},
-		yaxis: {
-			ticks: [],
-			min: 0,
-			autoscaleMargin: 0.1
-		},
-		selection: {
-			mode: "x"
-		}
-	});
+			selection: {
+				mode: "x"
+			},
+		};
+		var overviewOptions = {
+			legend: { show: false},
+			series: {
+				lines: {
+					show: true,
+					lineWidth: 1
+				},
+				shadowSize: 0
+			},
+			xaxis: {
+				ticks: [],
+				mode: "time"
+			},
+			yaxis: {
+				ticks: [],
+				min: 0,
+				autoscaleMargin: 0.1
+			},
+			selection: {
+				mode: "x"
+			}
+		};
 
-	// now connect the two
-	$("#placeholder").bind("plotselected", function (event, ranges) {
+		var makePlot = function(data) {
+			return $.plot($("#placeholder"), data, options);
+		};
+		var makeOverview = function(data) {
+			return $.plot("#overview", data, overviewOptions);
+		};
+		var bind = function() {
+			// now connect the two
+			$("#placeholder").bind("plotselected", function (event, ranges) {
+				// Stop the polling.
+				clearInterval(id);
+				// do the zooming
+				$.each(plot.getXAxes(), function(_, axis) {
+					var opts = axis.options;
+					opts.min = ranges.xaxis.from;
+					opts.max = ranges.xaxis.to;
+				});
+				plot.setupGrid();
+				plot.draw();
+				plot.clearSelection();
 
-		// do the zooming
-		$.each(plot.getXAxes(), function(_, axis) {
-			var opts = axis.options;
-			opts.min = ranges.xaxis.from;
-			opts.max = ranges.xaxis.to;
+				// don't fire event on the overview to prevent eternal loop
+				overview.setSelection(ranges, true);
+			});
+
+			$("#overview").bind("plotselected", function (event, ranges) {
+				// Stop the polling
+				clearInterval(id);
+
+				plot.setSelection(ranges);
+			});
+		};
+
+		var plot = makePlot(data);
+		var overview = makeOverview(data);
+		bind();
+
+		$("#output-image").click(function() {
+			var canvas = plot.getCanvas();
+			var raw = canvas.toDataURL();
+			var image = raw.replace("image/png", "image/octet-stream");
+			document.location.href = image;
 		});
-		plot.setupGrid();
-		plot.draw();
-		plot.clearSelection();
 
-		// don't fire event on the overview to prevent eternal loop
+		function fetchData() {
+			$.ajax({
+				url: "/ajax",
+				type: "GET",
+				dataType: "json",
+				success: function(data) {
+					plot = makePlot(data);
+					overview = makeOverview(data);
+					bind();
+				}
+			});
+		}
 
-		overview.setSelection(ranges, true);
-	});
-
-	$("#overview").bind("plotselected", function (event, ranges) {
-		plot.setSelection(ranges);
-	});
-	
+		var updateStarted = false;
+		$("#update-graph").click(function() {
+			if (updateStarted) {
+				clearInterval(id);
+				updateStarted = false;
+			} else {
+				id = setInterval(fetchData, 100);
+				updateStarted = true;
+			}
+		});
 	});
 </script>
 <style>
@@ -235,8 +297,21 @@ scvg.sys: virtual memory requested from the operating system (should aproximate 
 scvg.released: virtual memory returned to the operating system by the scavenger
 scvg.consumed: virtual memory in use (should roughly match process RSS)
 </pre>
+<button id="update-graph">Update graphic (Poll)</button>
+<button id="output-image">Output Graph</button>
 </body>
 </html>
+`))
+
+var visAjaxTmpl = template.Must(template.New("vis-ajax").Parse(`
+[
+	{ "label": "gc.heapinuse", "data": {{ .HeapUse }} },
+	{ "label": "scvg.inuse", "data": {{ .ScvgInuse }} },
+	{ "label": "scvg.idle", "data": {{ .ScvgIdle }} },
+	{ "label": "scvg.sys", "data": {{ .ScvgSys }} },
+	{ "label": "scvg.released", "data": {{ .ScvgReleased }} },
+	{ "label": "scvg.consumed", "data": {{ .ScvgConsumed }} }
+]
 `))
 
 var (
@@ -290,7 +365,7 @@ func main() {
 	gc := make(chan *gctrace, 1)
 	scvg := make(chan *scvgtrace, 1)
 
-	go startSubprocess(pw)
+	go startSubprocess(os.Args[1:], pw)
 	go startParser(pr, gc, scvg)
 
 	l, err := net.Listen("tcp4", "127.0.0.1:0")
@@ -298,6 +373,7 @@ func main() {
 		log.Fatal(err)
 	}
 	http.HandleFunc("/", index)
+	http.HandleFunc("/ajax", ajax)
 	go http.Serve(l, nil)
 
 	url := fmt.Sprintf("http://%s/", l.Addr())
