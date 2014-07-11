@@ -68,14 +68,20 @@ type gctrace struct {
 
 type graphPoints [2]int
 
-var heap0, heap1, nmalloc, nfree, nobj []graphPoints
+var heapuse, scvginuse, scvgidle, scvgsys, scvgreleased, scvgconsumed []graphPoints
 
 func index(w http.ResponseWriter, req *http.Request) {
 	visTmpl.Execute(w, struct {
-		Heap0, Heap1, NMalloc, NFree, NObj []graphPoints
-		Title                              string
+		HeapUse, ScvgInuse, ScvgIdle, ScvgSys, ScvgReleased, ScvgConsumed []graphPoints
+		Title                                                             string
 	}{
-		heap0, heap1, nmalloc, nfree, nobj, strings.Join(os.Args[1:], " "),
+		HeapUse:      heapuse,
+		ScvgInuse:    scvginuse,
+		ScvgIdle:     scvgidle,
+		ScvgSys:      scvgsys,
+		ScvgReleased: scvgreleased,
+		ScvgConsumed: scvgconsumed,
+		Title:        strings.Join(os.Args[1:], " "),
 	})
 
 }
@@ -89,11 +95,12 @@ var visTmpl = template.Must(template.New("vis").Parse(`
 <script type="text/javascript">
 
     var data = [
-//	{ label: "gc.nmalloc", data: {{ .NMalloc }} },
-//	{ label: "gc.nfree", data: {{ .NFree }} },
-    	{ label: "gc.Heap0", data: {{ .Heap0 }} },
-	{ label: "gc.Heap1", data: {{ .Heap1 }} },
-	{ label: "gc.nobj", data: {{ .NObj }} },
+    	{ label: "gc.heapinuse", data: {{ .HeapUse }} },
+    	{ label: "scvg.inuse", data: {{ .ScvgInuse }} },
+    	{ label: "scvg.idle", data: {{ .ScvgIdle }} },
+    	{ label: "scvg.sys", data: {{ .ScvgSys }} },
+    	{ label: "scvg.released", data: {{ .ScvgReleased }} },
+    	{ label: "scvg.consumed", data: {{ .ScvgConsumed }} },
 	]
 
     $(document).ready(function() {
@@ -110,33 +117,67 @@ var visTmpl = template.Must(template.New("vis").Parse(`
 <body>
 <pre>{{ .Title }}</pre>
 <div id="placeholder" style="width:1200px; height:400px"></div>
+<pre><b>Legend</b>
 
+gc.heapinuse: heap in use after gc
+scvg.inuse: heap considered in use by the scavenger
+scvg.idle: heap considered unused by the scavenger
+scvg.sys: heap requested from the operating system
+scvg.released: heap returned to the operating system by the scavenger
+scvg.consumed: total heap size (should roughly match process VSS)
+</pre>
 </body>
 </html>
 `))
 
-func startParser(r io.Reader, trace chan *gctrace) {
-	var re = regexp.MustCompile(`gc\d+\(\d+\): \d+\+\d+\+\d+\+\d+ us, \d+ -> \d+ MB, \d+ \(\d+-\d+\) objects, \d+\/\d+\/\d+ sweeps, \d+\(\d+\) handoff, \d+\(\d+\) steal, \d+\/\d+\/\d+ yields`)
+var (
+	gcre   = regexp.MustCompile(`gc\d+\(\d+\): \d+\+\d+\+\d+\+\d+ us, \d+ -> \d+ MB, \d+ \(\d+-\d+\) objects, \d+\/\d+\/\d+ sweeps, \d+\(\d+\) handoff, \d+\(\d+\) steal, \d+\/\d+\/\d+ yields`)
+	scvgre = regexp.MustCompile(`scvg\d+: inuse: \d+, idle: \d+, sys: \d+, released: \d+, consumed: \d+ \(MB\)`)
+)
+
+type scvgtrace struct {
+	inuse    int
+	idle     int
+	sys      int
+	released int
+	consumed int
+}
+
+func startParser(r io.Reader, gcc chan *gctrace, scvgc chan *scvgtrace) {
 
 	defer close(parserDone)
 
 	sc := bufio.NewScanner(r)
 	for sc.Scan() {
 		line := sc.Text()
-		if !re.MatchString(line) {
-			fmt.Println(line)
+		// try to parse as a gc trace line
+		if gcre.MatchString(line) {
+			var gc gctrace
+			_, err := fmt.Sscanf(line, "gc%d(%d): %d+%d+%d+%d us, %d -> %d MB, %d (%d-%d) objects, %d/%d/%d sweeps, %d(%d) handoff, %d(%d) steal, %d/%d/%d yields\n",
+				&gc.NumGC, &gc.Nproc, &gc.t1, &gc.t2, &gc.t3, &gc.t4, &gc.Heap0, &gc.Heap1, &gc.Obj, &gc.NMalloc, &gc.NFree,
+				&gc.NSpan, &gc.NBGSweep, &gc.NPauseSweep, &gc.NHandoff, &gc.NHandoffCnt, &gc.NSteal, &gc.NStealCnt, &gc.NProcYield, &gc.NOsYield, &gc.NSleep)
+			if err != nil {
+				log.Printf("corrupt gctrace: %v: %s", err, line)
+				continue
+			}
+			gcc <- &gc
 			continue
 		}
-		var gc gctrace
-		_, err := fmt.Sscanf(line, "gc%d(%d): %d+%d+%d+%d us, %d -> %d MB, %d (%d-%d) objects, %d/%d/%d sweeps, %d(%d) handoff, %d(%d) steal, %d/%d/%d yields\n",
-			&gc.NumGC, &gc.Nproc, &gc.t1, &gc.t2, &gc.t3, &gc.t4, &gc.Heap0, &gc.Heap1, &gc.Obj, &gc.NMalloc, &gc.NFree,
-			&gc.NSpan, &gc.NBGSweep, &gc.NPauseSweep, &gc.NHandoff, &gc.NHandoffCnt, &gc.NSteal, &gc.NStealCnt, &gc.NProcYield, &gc.NOsYield, &gc.NSleep)
-		if err != nil {
-			log.Printf("corrupt gctrace: %v: %s", err, line)
+		// try to parse as a scavenger line
+		if scvgre.MatchString(line) {
+			var scvg scvgtrace
+			var n int
+			_, err := fmt.Sscanf(line, "scvg%d: inuse: %d, idle: %d, sys: %d, released: %d, consumed: %d (MB)\n",
+				&n, &scvg.inuse, &scvg.idle, &scvg.sys, &scvg.released, &scvg.consumed)
+			if err != nil {
+				log.Printf("corrupt scvgtrace: %v: %s", err, line)
+				continue
+			}
+			scvgc <- &scvg
 			continue
 		}
-		trace <- &gc
-
+		// nope ? oh well, print it out
+		fmt.Println(line)
 	}
 	if err := sc.Err(); err != nil {
 		log.Fatal(err)
@@ -148,10 +189,11 @@ func main() {
 		log.Fatalf("usage: %s command <args>...", os.Args[0])
 	}
 	pr, pw, _ := os.Pipe()
-	trace := make(chan *gctrace, 1)
+	gc := make(chan *gctrace, 1)
+	scvg := make(chan *scvgtrace, 1)
 
 	go startSubprocess(pw)
-	go startParser(pr, trace)
+	go startParser(pr, gc, scvg)
 
 	l, err := net.Listen("tcp4", "127.0.0.1:0")
 	if err != nil {
@@ -163,13 +205,19 @@ func main() {
 	addr := l.Addr()
 	browser.OpenURL(fmt.Sprintf("http://%s/", addr))
 
-	for t := range trace {
-		ts := int(time.Now().UnixNano() / 1e6)
-		heap0 = append(heap0, graphPoints{ts, t.Heap0})
-		heap1 = append(heap1, graphPoints{ts, t.Heap1})
-		nmalloc = append(nmalloc, graphPoints{ts, t.NMalloc})
-		nfree = append(nmalloc, graphPoints{ts, t.NFree})
-		nobj = append(nobj, graphPoints{ts, t.Obj})
+	for {
+		select {
+		case gc := <-gc:
+			ts := int(time.Now().UnixNano() / 1e6)
+			heapuse = append(heapuse, graphPoints{ts, gc.Heap1})
+		case scvg := <-scvg:
+			ts := int(time.Now().UnixNano() / 1e6)
+			scvginuse = append(scvginuse, graphPoints{ts, scvg.inuse})
+			scvgidle = append(scvgidle, graphPoints{ts, scvg.idle})
+			scvgsys = append(scvgsys, graphPoints{ts, scvg.sys})
+			scvgreleased = append(scvgreleased, graphPoints{ts, scvg.released})
+			scvgconsumed = append(scvgconsumed, graphPoints{ts, scvg.consumed})
+		}
 	}
 
 	<-parserDone
