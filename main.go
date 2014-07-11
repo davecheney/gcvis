@@ -3,11 +3,12 @@
 //
 // usage:
 //
-//     gcvis program [arguments]...
+//	 gcvis program [arguments]...
 package main
 
 import (
 	"bufio"
+	"encoding/json"
 	"fmt"
 	"html/template"
 	"io"
@@ -24,10 +25,9 @@ import (
 	"github.com/pkg/browser"
 )
 
-func startSubprocess(w io.Writer) {
+func startSubprocess(args []string, w io.Writer) {
 	env := os.Environ()
 	env = append(env, "GODEBUG=gctrace=1")
-	args := os.Args[1:]
 	cmd := exec.Command(args[0], args[1:]...)
 	cmd.Env = env
 	cmd.Stdin = os.Stdin
@@ -80,7 +80,7 @@ var mu sync.RWMutex
 func index(w http.ResponseWriter, req *http.Request) {
 	mu.RLock()
 	defer mu.RUnlock()
-	visTmpl.Execute(w, struct {
+	visIndexTmpl.Execute(w, struct {
 		HeapUse, ScvgInuse, ScvgIdle, ScvgSys, ScvgReleased, ScvgConsumed []graphPoints
 		Title                                                             string
 	}{
@@ -92,10 +92,30 @@ func index(w http.ResponseWriter, req *http.Request) {
 		ScvgConsumed: scvgconsumed,
 		Title:        strings.Join(os.Args[1:], " "),
 	})
-
 }
 
-var visTmpl = template.Must(template.New("vis").Parse(`
+func ajax(w http.ResponseWriter, req *http.Request) {
+	mu.RLock()
+	defer mu.RUnlock()
+	toJsonString := func(g []graphPoints) string {
+		j, _ := json.Marshal(g)
+		return string(j)
+	}
+	visAjaxTmpl.Execute(w, struct {
+		HeapUse, ScvgInuse, ScvgIdle, ScvgSys, ScvgReleased, ScvgConsumed string
+		Title                                                             string
+	}{
+		HeapUse:      toJsonString(heapuse),
+		ScvgInuse:    toJsonString(scvginuse),
+		ScvgIdle:     toJsonString(scvgidle),
+		ScvgSys:      toJsonString(scvgsys),
+		ScvgReleased: toJsonString(scvgreleased),
+		ScvgConsumed: toJsonString(scvgconsumed),
+		Title:        strings.Join(os.Args[1:], " "),
+	})
+}
+
+var visIndexTmpl = template.Must(template.New("vis-index").Parse(`
 <html>
 <head>
 <title>gcvis - {{ .Title }}</title>
@@ -105,30 +125,50 @@ var visTmpl = template.Must(template.New("vis").Parse(`
 
 <script type="text/javascript">
 
-    var data = [
-    	{ label: "gc.heapinuse", data: {{ .HeapUse }} },
-    	{ label: "scvg.inuse", data: {{ .ScvgInuse }} },
-    	{ label: "scvg.idle", data: {{ .ScvgIdle }} },
-    	{ label: "scvg.sys", data: {{ .ScvgSys }} },
-    	{ label: "scvg.released", data: {{ .ScvgReleased }} },
-    	{ label: "scvg.consumed", data: {{ .ScvgConsumed }} },
+	var data = [
+		{ label: "gc.heapinuse", data: {{ .HeapUse }} },
+		{ label: "scvg.inuse", data: {{ .ScvgInuse }} },
+		{ label: "scvg.idle", data: {{ .ScvgIdle }} },
+		{ label: "scvg.sys", data: {{ .ScvgSys }} },
+		{ label: "scvg.released", data: {{ .ScvgReleased }} },
+		{ label: "scvg.consumed", data: {{ .ScvgConsumed }} }
 	]
 
-    $(document).ready(function() {
-        var plot = $.plot($("#placeholder"), data, {
-			xaxis: {
-    			mode: "time",
-    			timeformat: "%I:%M:%S "
-			},
-        });
-	
+	$(document).ready(function() {
+		make = function(data) {
+			return $.plot($("#placeholder"), data, {
+				xaxis: {
+					mode: "time",
+					timeformat: "%I:%M:%S "
+				},
+			});
+		}
+		var plot = make(data);
+
 		$("#output-image").click(function() {
 			var canvas = plot.getCanvas();
 			var raw = canvas.toDataURL();
 			var image = raw.replace("image/png", "image/octet-stream");
 			document.location.href = image;
 		});
-    })
+
+		function fetchData() {
+			$.ajax({
+				url: "/ajax",
+				type: "GET",
+				dataType: "json",
+				success: function(data) {
+					plot = make(data)
+				}
+			});
+		}
+
+		var id;
+		$("#update-graph").click(function() {
+			clearInterval(id)
+			id = setInterval(fetchData, 100);	
+		});
+	})
 
 </script>
 </head>
@@ -144,9 +184,21 @@ scvg.sys: virtual memory requested from the operating system (should aproximate 
 scvg.released: virtual memory returned to the operating system by the scavenger
 scvg.consumed: virtual memory in use (should roughly match process RSS)
 </pre>
+<button id="update-graph">Update graphic (Poll)</button>
 <button id="output-image">Output Graph</button>
 </body>
 </html>
+`))
+
+var visAjaxTmpl = template.Must(template.New("vis-ajax").Parse(`
+[
+	{ "label": "gc.heapinuse", "data": {{ .HeapUse }} },
+	{ "label": "scvg.inuse", "data": {{ .ScvgInuse }} },
+	{ "label": "scvg.idle", "data": {{ .ScvgIdle }} },
+	{ "label": "scvg.sys", "data": {{ .ScvgSys }} },
+	{ "label": "scvg.released", "data": {{ .ScvgReleased }} },
+	{ "label": "scvg.consumed", "data": {{ .ScvgConsumed }} }
+]
 `))
 
 var (
@@ -200,7 +252,7 @@ func main() {
 	gc := make(chan *gctrace, 1)
 	scvg := make(chan *scvgtrace, 1)
 
-	go startSubprocess(pw)
+	go startSubprocess(os.Args[1:], pw)
 	go startParser(pr, gc, scvg)
 
 	l, err := net.Listen("tcp4", "127.0.0.1:0")
@@ -208,6 +260,7 @@ func main() {
 		log.Fatal(err)
 	}
 	http.HandleFunc("/", index)
+	http.HandleFunc("/ajax", ajax)
 	go http.Serve(l, nil)
 
 	url := fmt.Sprintf("http://%s/", l.Addr())
