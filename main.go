@@ -17,11 +17,10 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
-
-	"github.com/pkg/browser"
 )
 
 func startSubprocess(w io.Writer) {
@@ -282,6 +281,23 @@ func startParser(r io.Reader, gcc chan *gctrace, scvgc chan *scvgtrace) {
 	}
 }
 
+// startBrowser tries to open the URL in a browser, and returns
+// whether it succeed.
+func startBrowser(url string) bool {
+	// try to start the browser
+	var args []string
+	switch runtime.GOOS {
+	case "darwin":
+		args = []string{"open"}
+	case "windows":
+		args = []string{"cmd", "/c", "start"}
+	default:
+		args = []string{"xdg-open"}
+	}
+	cmd := exec.Command(args[0], append(args[1:], url)...)
+	return cmd.Start() == nil
+}
+
 func main() {
 	if len(os.Args) < 2 {
 		log.Fatalf("usage: %s command <args>...", os.Args[0])
@@ -302,7 +318,7 @@ func main() {
 
 	url := fmt.Sprintf("http://%s/", l.Addr())
 	log.Printf("opening browser window, if this fails, navigate to %s", url)
-	browser.OpenURL(url)
+	startBrowser(url)
 
 	for {
 		select {
