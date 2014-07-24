@@ -99,6 +99,7 @@ var visTmpl = template.Must(template.New("vis").Parse(`
 <html>
 <head>
 <title>gcvis - {{ .Title }}</title>
+<meta http-equiv="refresh" content="10">
 <script src="//cdnjs.cloudflare.com/ajax/libs/jquery/2.0.3/jquery.min.js"></script>
 <script src="//cdnjs.cloudflare.com/ajax/libs/flot/0.8.2/jquery.flot.min.js"></script>
 <script src="//cdnjs.cloudflare.com/ajax/libs/flot/0.8.2/jquery.flot.time.min.js"></script>
@@ -116,9 +117,15 @@ var visTmpl = template.Must(template.New("vis").Parse(`
 	];
 
 	var options = {
+		legend: {
+			position: "nw",
+			noColumns: 2,
+			backgroundOpacity: 0.2
+		},
 		xaxis: {
 			mode: "time",
-			timeformat: "%I:%M:%S "
+			timezone: "browser",
+			timeformat: "%H:%M:%S "
 		},
 		selection: {
 			mode: "x"
