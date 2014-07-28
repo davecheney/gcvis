@@ -1,4 +1,4 @@
-// gzvis is a tool to assist you visualising the operation of
+// gcvis is a tool to assist you visualising the operation of
 // the go runtime garbage collector.
 //
 // usage:
@@ -8,6 +8,8 @@ package main
 
 import (
 	"bufio"
+	"container/ring"
+	"flag"
 	"fmt"
 	"html/template"
 	"io"
@@ -27,7 +29,7 @@ import (
 func startSubprocess(w io.Writer) {
 	env := os.Environ()
 	env = append(env, "GODEBUG=gctrace=1")
-	args := os.Args[1:]
+	args := flag.Args()
 	cmd := exec.Command(args[0], args[1:]...)
 	cmd.Env = env
 	cmd.Stdin = os.Stdin
@@ -73,26 +75,76 @@ type scvgtrace struct {
 
 type graphPoints [2]int
 
-var heapuse, scvginuse, scvgidle, scvgsys, scvgreleased, scvgconsumed []graphPoints
+type gcviz struct {
+	heapuse, scvginuse, scvgidle, scvgsys, scvgreleased, scvgconsumed *ring.Ring
 
-var mu sync.RWMutex
+	mu sync.RWMutex
+}
 
-func index(w http.ResponseWriter, req *http.Request) {
-	mu.RLock()
-	defer mu.RUnlock()
-	visTmpl.Execute(w, struct {
+func newgcviz(histSz int) *gcviz {
+	return &gcviz{
+		heapuse:      ring.New(histSz),
+		scvginuse:    ring.New(histSz),
+		scvgidle:     ring.New(histSz),
+		scvgsys:      ring.New(histSz),
+		scvgreleased: ring.New(histSz),
+		scvgconsumed: ring.New(histSz),
+	}
+}
+
+func asFlotStream(r *ring.Ring) []graphPoints {
+	var strm []graphPoints
+	r.Do(func(v interface{}) {
+		if v == nil {
+			return
+		}
+		strm = append(strm, v.(graphPoints))
+	})
+	return strm
+}
+
+func (g *gcviz) tmpl() interface{} {
+	g.mu.RLock()
+	defer g.mu.RUnlock()
+
+	return struct {
 		HeapUse, ScvgInuse, ScvgIdle, ScvgSys, ScvgReleased, ScvgConsumed []graphPoints
 		Title                                                             string
 	}{
-		HeapUse:      heapuse,
-		ScvgInuse:    scvginuse,
-		ScvgIdle:     scvgidle,
-		ScvgSys:      scvgsys,
-		ScvgReleased: scvgreleased,
-		ScvgConsumed: scvgconsumed,
-		Title:        strings.Join(os.Args[1:], " "),
-	})
+		HeapUse:      asFlotStream(g.heapuse),
+		ScvgInuse:    asFlotStream(g.scvginuse),
+		ScvgIdle:     asFlotStream(g.scvgidle),
+		ScvgSys:      asFlotStream(g.scvgsys),
+		ScvgReleased: asFlotStream(g.scvgreleased),
+		ScvgConsumed: asFlotStream(g.scvgconsumed),
+		Title:        strings.Join(flag.Args(), " "),
+	}
+}
 
+func observe(t, v int, r *ring.Ring) *ring.Ring {
+	r.Value = graphPoints{t, v}
+	return r.Next()
+}
+
+func (g *gcviz) ingest(gcs chan *gctrace, scvgs chan *scvgtrace) {
+	for {
+		select {
+		case gc := <-gcs:
+			g.mu.Lock()
+			ts := int(time.Now().UnixNano() / 1e6)
+			g.heapuse = observe(ts, gc.Heap1, g.heapuse)
+			g.mu.Unlock()
+		case scvg := <-scvgs:
+			g.mu.Lock()
+			ts := int(time.Now().UnixNano() / 1e6)
+			g.scvginuse = observe(ts, scvg.inuse, g.scvginuse)
+			g.scvgidle = observe(ts, scvg.idle, g.scvgidle)
+			g.scvgsys = observe(ts, scvg.sys, g.scvgsys)
+			g.scvgreleased = observe(ts, scvg.released, g.scvgreleased)
+			g.scvgconsumed = observe(ts, scvg.consumed, g.scvgconsumed)
+			g.mu.Unlock()
+		}
+	}
 }
 
 var visTmpl = template.Must(template.New("vis").Parse(`
@@ -180,7 +232,7 @@ var visTmpl = template.Must(template.New("vis").Parse(`
 	$("#overview").bind("plotselected", function (event, ranges) {
 		plot.setSelection(ranges);
 	});
-	
+
 	});
 </script>
 <style>
@@ -290,9 +342,12 @@ func startParser(r io.Reader, gcc chan *gctrace, scvgc chan *scvgtrace) {
 }
 
 func main() {
-	if len(os.Args) < 2 {
+	histSz := flag.Int("historysize", 4096, "limits the maximum number of samples retained")
+	flag.Parse()
+	if args := flag.Args(); len(args) < 2 {
 		log.Fatalf("usage: %s command <args>...", os.Args[0])
 	}
+
 	pr, pw, _ := os.Pipe()
 	gc := make(chan *gctrace, 1)
 	scvg := make(chan *scvgtrace, 1)
@@ -304,29 +359,15 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	http.HandleFunc("/", index)
+	gcviz := newgcviz(*histSz)
+	http.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
+		visTmpl.Execute(w, gcviz.tmpl())
+	})
 	go http.Serve(l, nil)
 
 	url := fmt.Sprintf("http://%s/", l.Addr())
 	log.Printf("opening browser window, if this fails, navigate to %s", url)
 	browser.OpenURL(url)
 
-	for {
-		select {
-		case gc := <-gc:
-			mu.Lock()
-			ts := int(time.Now().UnixNano() / 1e6)
-			heapuse = append(heapuse, graphPoints{ts, gc.Heap1})
-			mu.Unlock()
-		case scvg := <-scvg:
-			mu.Lock()
-			ts := int(time.Now().UnixNano() / 1e6)
-			scvginuse = append(scvginuse, graphPoints{ts, scvg.inuse})
-			scvgidle = append(scvgidle, graphPoints{ts, scvg.idle})
-			scvgsys = append(scvgsys, graphPoints{ts, scvg.sys})
-			scvgreleased = append(scvgreleased, graphPoints{ts, scvg.released})
-			scvgconsumed = append(scvgconsumed, graphPoints{ts, scvg.consumed})
-			mu.Unlock()
-		}
-	}
+	gcviz.ingest(gc, scvg)
 }
