@@ -49,6 +49,7 @@ type gctrace struct {
 	Heap0       int // heap size before, in megabytes
 	Heap1       int // heap size after, in megabytes
 	Obj         int
+	Goroutines  int
 	NMalloc     int
 	NFree       int
 	NSpan       int
@@ -247,7 +248,7 @@ scvg.consumed: virtual memory in use (should roughly match process RSS)
 `))
 
 var (
-	gcre   = regexp.MustCompile(`gc\d+\(\d+\): \d+\+\d+\+\d+\+\d+ us, \d+ -> \d+ MB, \d+ \(\d+-\d+\) objects, \d+\/\d+\/\d+ sweeps, \d+\(\d+\) handoff, \d+\(\d+\) steal, \d+\/\d+\/\d+ yields`)
+	gcre   = regexp.MustCompile(`gc\d+\(\d+\): \d+\+\d+\+\d+\+\d+ us, \d+ -> \d+ MB, \d+ \(\d+-\d+\) objects, \d+ goroutines, \d+\/\d+\/\d+ sweeps, \d+\(\d+\) handoff, \d+\(\d+\) steal, \d+\/\d+\/\d+ yields`)
 	scvgre = regexp.MustCompile(`scvg\d+: inuse: \d+, idle: \d+, sys: \d+, released: \d+, consumed: \d+ \(MB\)`)
 )
 
@@ -255,11 +256,13 @@ func startParser(r io.Reader, gcc chan *gctrace, scvgc chan *scvgtrace) {
 	sc := bufio.NewScanner(r)
 	for sc.Scan() {
 		line := sc.Text()
+
 		// try to parse as a gc trace line
 		if gcre.MatchString(line) {
 			var gc gctrace
-			_, err := fmt.Sscanf(line, "gc%d(%d): %d+%d+%d+%d us, %d -> %d MB, %d (%d-%d) objects, %d/%d/%d sweeps, %d(%d) handoff, %d(%d) steal, %d/%d/%d yields\n",
+			_, err := fmt.Sscanf(line, "gc%d(%d): %d+%d+%d+%d us, %d -> %d MB, %d (%d-%d) objects, %d goroutines, %d/%d/%d sweeps, %d(%d) handoff, %d(%d) steal, %d/%d/%d yields\n",
 				&gc.NumGC, &gc.Nproc, &gc.t1, &gc.t2, &gc.t3, &gc.t4, &gc.Heap0, &gc.Heap1, &gc.Obj, &gc.NMalloc, &gc.NFree,
+				&gc.Goroutines,
 				&gc.NSpan, &gc.NBGSweep, &gc.NPauseSweep, &gc.NHandoff, &gc.NHandoffCnt, &gc.NSteal, &gc.NStealCnt, &gc.NProcYield, &gc.NOsYield, &gc.NSleep)
 			if err != nil {
 				log.Printf("corrupt gctrace: %v: %s", err, line)
