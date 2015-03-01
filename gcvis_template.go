@@ -1,3 +1,7 @@
+package main
+
+const (
+	GCVIS_TMPL = `
 <html>
 <head>
 <title>gcvis - {{ .Title }}</title>
@@ -146,3 +150,5 @@ scvg.consumed: virtual memory in use (should roughly match process RSS)
 </pre>
 </body>
 </html>
+	`
+)

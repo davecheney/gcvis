@@ -8,7 +8,6 @@ package main
 
 import (
 	"fmt"
-	"io/ioutil"
 	"log"
 	"net"
 	"net/http"
@@ -19,7 +18,6 @@ import (
 )
 
 var (
-	gcvisHtml  []byte
 	gcvisGraph Graph
 
 	listener net.Listener
@@ -34,11 +32,6 @@ func main() {
 
 	if len(os.Args) < 2 {
 		log.Fatalf("usage: %s command <args>...", os.Args[0])
-	}
-
-	gcvisHtml, err = ioutil.ReadFile("template/gcvis.html.tmpl")
-	if err != nil {
-		log.Fatalf("Could not read template file (template/gcvis.html.tmpl): " + err.Error())
 	}
 
 	listener, err = net.Listen("tcp4", "127.0.0.1:0")
@@ -56,7 +49,7 @@ func main() {
 		scvgChan: scvgChan,
 	}
 
-	gcvisGraph = NewGraph(strings.Join(os.Args[1:], " "), string(gcvisHtml))
+	gcvisGraph = NewGraph(strings.Join(os.Args[1:], " "), GCVIS_TMPL)
 
 	go startSubprocess(pw)
 	go parser.Run()
