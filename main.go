@@ -29,7 +29,7 @@ func indexHandler(w http.ResponseWriter, req *http.Request) {
 	gcvisGraph.write(w)
 }
 
-func init() {
+func main() {
 	var err error
 
 	if len(os.Args) < 2 {
@@ -45,9 +45,7 @@ func init() {
 	if err != nil {
 		log.Fatal(err)
 	}
-}
 
-func main() {
 	pr, pw, _ := os.Pipe()
 	gcChan := make(chan *gctrace, 1)
 	scvgChan := make(chan *scvgtrace, 1)
