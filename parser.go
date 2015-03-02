@@ -9,13 +9,15 @@ import (
 )
 
 const (
-	GC_REGEXP   = `gc\d+\(\d+\): \d+\+\d+\+\d+\+\d+ us, \d+ -> \d+ MB, \d+ \(\d+-\d+\) objects, \d+\/\d+\/\d+ sweeps, \d+\(\d+\) handoff, \d+\(\d+\) steal, \d+\/\d+\/\d+ yields`
-	SCVG_REGEXP = `scvg\d+: inuse: \d+, idle: \d+, sys: \d+, released: \d+, consumed: \d+ \(MB\)`
+	GCRegexp      = `gc\d+\(\d+\): \d+\+\d+\+\d+\+\d+ us, \d+ -> \d+ MB, \d+ \(\d+-\d+\) objects, \d+\/\d+\/\d+ sweeps, \d+\(\d+\) handoff, \d+\(\d+\) steal, \d+\/\d+\/\d+ yields`
+	SCVGRegexp    = `scvg\d+: inuse: \d+, idle: \d+, sys: \d+, released: \d+, consumed: \d+ \(MB\)`
+	GCTraceScan   = "gc%d(%d): %d+%d+%d+%d us, %d -> %d MB, %d (%d-%d) objects, %d/%d/%d sweeps, %d(%d) handoff, %d(%d) steal, %d/%d/%d yields\n"
+	SCVGTraceScan = "scvg%d: inuse: %d, idle: %d, sys: %d, released: %d, consumed: %d (MB)\n"
 )
 
 var (
-	gcre   = regexp.MustCompile(GC_REGEXP)
-	scvgre = regexp.MustCompile(SCVG_REGEXP)
+	gcre   = regexp.MustCompile(GCRegexp)
+	scvgre = regexp.MustCompile(SCVGRegexp)
 )
 
 type Parser struct {
@@ -54,10 +56,10 @@ func (p *Parser) Run() {
 }
 
 func parseGCTrace(line string) *gctrace {
-	gc := gctrace{}
+	var gc gctrace
 
 	_, err := fmt.Sscanf(
-		line, "gc%d(%d): %d+%d+%d+%d us, %d -> %d MB, %d (%d-%d) objects, %d/%d/%d sweeps, %d(%d) handoff, %d(%d) steal, %d/%d/%d yields\n",
+		line, GCTraceScan,
 		&gc.NumGC, &gc.Nproc, &gc.t1, &gc.t2, &gc.t3, &gc.t4, &gc.Heap0, &gc.Heap1, &gc.Obj, &gc.NMalloc, &gc.NFree,
 		&gc.NSpan, &gc.NBGSweep, &gc.NPauseSweep, &gc.NHandoff, &gc.NHandoffCnt, &gc.NSteal, &gc.NStealCnt, &gc.NProcYield, &gc.NOsYield, &gc.NSleep,
 	)
@@ -71,9 +73,9 @@ func parseGCTrace(line string) *gctrace {
 }
 
 func parseSCVGTrace(line string) *scvgtrace {
-	scvg := scvgtrace{}
+	var scvg scvgtrace
 	var n int
-	_, err := fmt.Sscanf(line, "scvg%d: inuse: %d, idle: %d, sys: %d, released: %d, consumed: %d (MB)\n",
+	_, err := fmt.Sscanf(line, SCVGTraceScan,
 		&n, &scvg.inuse, &scvg.idle, &scvg.sys, &scvg.released, &scvg.consumed)
 	if err != nil {
 		log.Printf("corrupt scvgtrace: %v: %s", err, line)

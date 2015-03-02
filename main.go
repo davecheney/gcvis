@@ -17,11 +17,7 @@ import (
 	"github.com/pkg/browser"
 )
 
-var (
-	gcvisGraph Graph
-
-	listener net.Listener
-)
+var gcvisGraph Graph
 
 func indexHandler(w http.ResponseWriter, req *http.Request) {
 	gcvisGraph.write(w)
@@ -34,7 +30,7 @@ func main() {
 		log.Fatalf("usage: %s command <args>...", os.Args[0])
 	}
 
-	listener, err = net.Listen("tcp4", "127.0.0.1:0")
+	listener, err := net.Listen("tcp4", "127.0.0.1:0")
 	if err != nil {
 		log.Fatal(err)
 	}

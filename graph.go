@@ -26,7 +26,6 @@ func NewGraph(title, tmpl string) Graph {
 		ScvgReleased: []graphPoints{},
 		ScvgConsumed: []graphPoints{},
 	}
-
 	g.setTmpl(tmpl)
 
 	return g
