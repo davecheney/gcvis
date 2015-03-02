@@ -33,12 +33,8 @@ func TestParserWithMatchingInput(t *testing.T) {
 	go timeoutAfter(100*time.Millisecond, t)
 
 	line := "gc76(1): 2+1+1390+1 us, 1 -> 3 MB, 16397 (1015746-999349) objects, 1436/1/0 sweeps, 0(0) handoff, 0(0) steal, 0/0/0 yields\n"
-	ended := make(chan bool, 1)
 
-	go func() {
-		runParserWith(line)
-		ended <- true
-	}()
+	go runParserWith(line)
 
 	expectedHeapSize := 3
 
@@ -47,8 +43,6 @@ func TestParserWithMatchingInput(t *testing.T) {
 		if gctrace.Heap1 != expectedHeapSize {
 			t.Errorf("Expected gctrace.Heap1 to equal %d. Got %d instead.", expectedHeapSize, gctrace.Heap1)
 		}
-	case <-ended:
-		t.Errorf("Parser ran but our line didn't match.")
 	case <-timeout:
 		t.Fatalf("Execution timed out.")
 	}
@@ -59,12 +53,8 @@ func TestParserGoRoutinesInput(t *testing.T) {
 	go timeoutAfter(100*time.Millisecond, t)
 
 	line := "gc76(1): 2+1+1390+1 us, 1 -> 3 MB, 16397 (1015746-999349) objects, 12 goroutines, 1436/1/0 sweeps, 0(0) handoff, 0(0) steal, 0/0/0 yields\n"
-	ended := make(chan bool, 1)
 
-	go func() {
-		runParserWith(line)
-		ended <- true
-	}()
+	go runParserWith(line)
 
 	expectedHeapSize := 3
 
@@ -73,8 +63,6 @@ func TestParserGoRoutinesInput(t *testing.T) {
 		if gctrace.Heap1 != expectedHeapSize {
 			t.Errorf("Expected gctrace.Heap1 to equal %d. Got %d instead.", expectedHeapSize, gctrace.Heap1)
 		}
-	case <-ended:
-		t.Errorf("Parser ran but our line didn't match.")
 	case <-timeout:
 		t.Fatalf("Execution timed out.")
 	}
