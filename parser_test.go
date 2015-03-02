@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"reflect"
 	"testing"
 	"time"
 )
@@ -28,12 +29,14 @@ func TestParserWithMatchingInput(t *testing.T) {
 
 	go runParserWith(line)
 
-	expectedHeapSize := 3
+	expectedGCTrace := &gctrace{
+		Heap1: 3,
+	}
 
 	select {
 	case gctrace := <-gcChan:
-		if gctrace.Heap1 != expectedHeapSize {
-			t.Errorf("Expected gctrace.Heap1 to equal %d. Got %d instead.", expectedHeapSize, gctrace.Heap1)
+		if !reflect.DeepEqual(gctrace, expectedGCTrace) {
+			t.Errorf("Expected gctrace to equal %+v. Got %+v instead.", expectedGCTrace, gctrace)
 		}
 	case <-time.After(100 * time.Millisecond):
 		t.Fatalf("Execution timed out.")
@@ -41,18 +44,41 @@ func TestParserWithMatchingInput(t *testing.T) {
 }
 
 func TestParserGoRoutinesInput(t *testing.T) {
-	t.Skip()
-
 	line := "gc76(1): 2+1+1390+1 us, 1 -> 3 MB, 16397 (1015746-999349) objects, 12 goroutines, 1436/1/0 sweeps, 0(0) handoff, 0(0) steal, 0/0/0 yields\n"
 
 	go runParserWith(line)
 
-	expectedHeapSize := 3
+	expectedGCTrace := &gctrace{
+		Heap1: 3,
+	}
 
 	select {
 	case gctrace := <-gcChan:
-		if gctrace.Heap1 != expectedHeapSize {
-			t.Errorf("Expected gctrace.Heap1 to equal %d. Got %d instead.", expectedHeapSize, gctrace.Heap1)
+		if !reflect.DeepEqual(gctrace, expectedGCTrace) {
+			t.Errorf("Expected gctrace to equal %+v. Got %+v instead.", expectedGCTrace, gctrace)
+		}
+	case <-time.After(100 * time.Millisecond):
+		t.Fatalf("Execution timed out.")
+	}
+}
+
+func TestParserWithScvgLine(t *testing.T) {
+	line := "scvg1: inuse: 12, idle: 13, sys: 14, released: 15, consumed: 16 (MB)"
+
+	go runParserWith(line)
+
+	expectedScvgTrace := &scvgtrace{
+		inuse:    12,
+		idle:     13,
+		sys:      14,
+		released: 15,
+		consumed: 16,
+	}
+
+	select {
+	case scvgTrace := <-scvgChan:
+		if !reflect.DeepEqual(scvgTrace, expectedScvgTrace) {
+			t.Errorf("Expected scvgTrace to equal %+v. Got %+v instead.", expectedScvgTrace, scvgTrace)
 		}
 	case <-time.After(100 * time.Millisecond):
 		t.Fatalf("Execution timed out.")

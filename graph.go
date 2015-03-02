@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-type graphPoints [2]int
+type graphPoints [2]int64
 
 type Graph struct {
 	Title                                                             string
@@ -44,14 +44,14 @@ func (g *Graph) write(w io.Writer) {
 func (g *Graph) AddGCTraceGraphPoint(gcTrace *gctrace) {
 	g.mu.RLock()
 	defer g.mu.RUnlock()
-	ts := int(time.Now().UnixNano() / 1e6)
+	ts := int64(time.Now().UnixNano() / 1e6)
 	g.HeapUse = append(g.HeapUse, graphPoints{ts, gcTrace.Heap1})
 }
 
 func (g *Graph) AddScavengerGraphPoint(scvg *scvgtrace) {
 	g.mu.RLock()
 	defer g.mu.RUnlock()
-	ts := int(time.Now().UnixNano() / 1e6)
+	ts := int64(time.Now().UnixNano() / 1e6)
 	g.ScvgInuse = append(g.ScvgInuse, graphPoints{ts, scvg.inuse})
 	g.ScvgIdle = append(g.ScvgIdle, graphPoints{ts, scvg.idle})
 	g.ScvgSys = append(g.ScvgSys, graphPoints{ts, scvg.sys})
