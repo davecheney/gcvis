@@ -1,9 +1,9 @@
 package main
 
 import (
+	"html/template"
 	"io"
 	"sync"
-	"text/template"
 	"time"
 )
 
