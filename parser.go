@@ -6,19 +6,29 @@ import (
 	"io"
 	"log"
 	"regexp"
+	"runtime"
 )
 
 const (
-	GCRegexp      = `gc\d+\(\d+\): \d+\+\d+\+\d+\+\d+ us, \d+ -> \d+ MB, \d+ \(\d+-\d+\) objects, \d+\/\d+\/\d+ sweeps, \d+\(\d+\) handoff, \d+\(\d+\) steal, \d+\/\d+\/\d+ yields`
 	SCVGRegexp    = `scvg\d+: inuse: \d+, idle: \d+, sys: \d+, released: \d+, consumed: \d+ \(MB\)`
-	GCTraceScan   = "gc%d(%d): %d+%d+%d+%d us, %d -> %d MB, %d (%d-%d) objects, %d/%d/%d sweeps, %d(%d) handoff, %d(%d) steal, %d/%d/%d yields\n"
 	SCVGTraceScan = "scvg%d: inuse: %d, idle: %d, sys: %d, released: %d, consumed: %d (MB)\n"
 )
 
 var (
-	gcre   = regexp.MustCompile(GCRegexp)
-	scvgre = regexp.MustCompile(SCVGRegexp)
+	gcTraceScan string
+	gcre        *regexp.Regexp
+	scvgre      = regexp.MustCompile(SCVGRegexp)
 )
+
+func init() {
+	if runtime.Version() >= "1.4" {
+		gcre = regexp.MustCompile(`gc\d+\(\d+\): \d+\+\d+\+\d+\+\d+ us, \d+ -> \d+ MB, \d+ \(\d+-\d+\) objects, \d+ goroutines, \d+\/\d+\/\d+ sweeps, \d+\(\d+\) handoff, \d+\(\d+\) steal, \d+\/\d+\/\d+ yields`)
+		gcTraceScan = "gc%d(%d): %d+%d+%d+%d us, %d -> %d MB, %d (%d-%d) objects, %d goroutines, %d/%d/%d sweeps, %d(%d) handoff, %d(%d) steal, %d/%d/%d yields\n"
+	} else {
+		gcre = regexp.MustCompile(`gc\d+\(\d+\): \d+\+\d+\+\d+\+\d+ us, \d+ -> \d+ MB, \d+ \(\d+-\d+\) objects, \d+\/\d+\/\d+ sweeps, \d+\(\d+\) handoff, \d+\(\d+\) steal, \d+\/\d+\/\d+ yields`)
+		gcTraceScan = "gc%d(%d): %d+%d+%d+%d us, %d -> %d MB, %d (%d-%d) objects, %d/%d/%d sweeps, %d(%d) handoff, %d(%d) steal, %d/%d/%d yields\n"
+	}
+}
 
 type Parser struct {
 	reader   io.Reader
@@ -58,15 +68,25 @@ func (p *Parser) Run() {
 func parseGCTrace(line string) *gctrace {
 	var gc gctrace
 
-	_, err := fmt.Sscanf(
-		line, GCTraceScan,
-		&gc.NumGC, &gc.Nproc, &gc.t1, &gc.t2, &gc.t3, &gc.t4, &gc.Heap0, &gc.Heap1, &gc.Obj, &gc.NMalloc, &gc.NFree,
-		&gc.NSpan, &gc.NBGSweep, &gc.NPauseSweep, &gc.NHandoff, &gc.NHandoffCnt, &gc.NSteal, &gc.NStealCnt, &gc.NProcYield, &gc.NOsYield, &gc.NSleep,
-	)
-
-	if err != nil {
-		log.Printf("corrupt gctrace: %v: %s", err, line)
-		return nil
+	if runtime.Version() >= "1.4" {
+		if _, err := fmt.Sscanf(
+			line, gcTraceScan,
+			&gc.NumGC, &gc.Nproc, &gc.t1, &gc.t2, &gc.t3, &gc.t4, &gc.Heap0, &gc.Heap1, &gc.Obj, &gc.NMalloc, &gc.NFree,
+			&gc.Goroutines,
+			&gc.NSpan, &gc.NBGSweep, &gc.NPauseSweep, &gc.NHandoff, &gc.NHandoffCnt, &gc.NSteal, &gc.NStealCnt, &gc.NProcYield, &gc.NOsYield, &gc.NSleep,
+		); err != nil {
+			log.Printf("corrupt gctrace: %v: %s", err, line)
+			return nil
+		}
+	} else {
+		if _, err := fmt.Sscanf(
+			line, gcTraceScan,
+			&gc.NumGC, &gc.Nproc, &gc.t1, &gc.t2, &gc.t3, &gc.t4, &gc.Heap0, &gc.Heap1, &gc.Obj, &gc.NMalloc, &gc.NFree,
+			&gc.NSpan, &gc.NBGSweep, &gc.NPauseSweep, &gc.NHandoff, &gc.NHandoffCnt, &gc.NSteal, &gc.NStealCnt, &gc.NProcYield, &gc.NOsYield, &gc.NSleep,
+		); err != nil {
+			log.Printf("corrupt gctrace: %v: %s", err, line)
+			return nil
+		}
 	}
 
 	return &gc

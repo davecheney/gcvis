@@ -18,6 +18,7 @@ type gctrace struct {
 	Heap0       int // heap size before, in megabytes
 	Heap1       int // heap size after, in megabytes
 	Obj         int
+	Goroutines  int
 	NMalloc     int
 	NFree       int
 	NSpan       int
