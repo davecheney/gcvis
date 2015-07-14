@@ -7,6 +7,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"log"
 	"net"
@@ -23,14 +24,25 @@ func indexHandler(w http.ResponseWriter, req *http.Request) {
 	gcvisGraph.write(w)
 }
 
+var iface = flag.String("i", "127.0.0.1", "specify interface to use.  defaults to 127.0.0.1.")
+
 func main() {
+
 	var err error
 
-	if len(os.Args) < 2 {
-		log.Fatalf("usage: %s command <args>...", os.Args[0])
+	flag.Usage = func() {
+		fmt.Fprintf(os.Stderr, "Usage of %s: command <args>...\n", os.Args[0])
+		flag.PrintDefaults()
 	}
 
-	listener, err := net.Listen("tcp4", "127.0.0.1:0")
+	flag.Parse()
+	if len(flag.Args()) < 1 {
+		flag.Usage()
+		return
+	}
+
+	ifaceAndPort := fmt.Sprintf("%v:0", *iface)
+	listener, err := net.Listen("tcp4", ifaceAndPort)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -45,7 +57,7 @@ func main() {
 		scvgChan: scvgChan,
 	}
 
-	gcvisGraph = NewGraph(strings.Join(os.Args[1:], " "), GCVIS_TMPL)
+	gcvisGraph = NewGraph(strings.Join(flag.Args(), " "), GCVIS_TMPL)
 
 	go startSubprocess(pw)
 	go parser.Run()
