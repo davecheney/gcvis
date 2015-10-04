@@ -7,9 +7,8 @@ import (
 	"os/exec"
 )
 
-func startSubprocess(w io.Writer) {
+func startSubprocess(w io.Writer, args []string) {
 	env := append(os.Environ(), "GODEBUG=gctrace=1")
-	args := os.Args[1:]
 	cmd := exec.Command(args[0], args[1:]...)
 	cmd.Env = env
 	cmd.Stdin = os.Stdin

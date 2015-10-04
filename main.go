@@ -59,7 +59,7 @@ func main() {
 
 	gcvisGraph = NewGraph(strings.Join(flag.Args(), " "), GCVIS_TMPL)
 
-	go startSubprocess(pw)
+	go startSubprocess(pw, flag.Args())
 	go parser.Run()
 
 	http.HandleFunc("/", indexHandler)
