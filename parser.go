@@ -6,33 +6,48 @@ import (
 	"io"
 	"log"
 	"regexp"
+	"runtime"
 	"strconv"
 )
 
 const (
-	GCRegexp   = `gc\d+\(\d+\): \d+\+\d+\+\d+\+\d+ us, \d+ -> (?P<Heap1>\d+) MB, \d+ \(\d+-\d+\) objects,( \d+ goroutines,)? \d+\/\d+\/\d+ sweeps, \d+\(\d+\) handoff, \d+\(\d+\) steal, \d+\/\d+\/\d+ yields`
-	SCVGRegexp = `scvg\d+: inuse: (?P<inuse>\d+), idle: (?P<idle>\d+), sys: (?P<sys>\d+), released: (?P<released>\d+), consumed: (?P<consumed>\d+) \(MB\)`
+	GCRegexpGo14 = `gc\d+\(\d+\): \d+\+\d+\+\d+\+\d+ us, \d+ -> (?P<Heap1>\d+) MB, \d+ \(\d+-\d+\) objects,( \d+ goroutines,)? \d+\/\d+\/\d+ sweeps, \d+\(\d+\) handoff, \d+\(\d+\) steal, \d+\/\d+\/\d+ yields`
+	GCRegexpGo15 = `gc .* (?P<Heap1>\d+) MB goal`
+	SCVGRegexp   = `scvg\d+: inuse: (?P<inuse>\d+), idle: (?P<idle>\d+), sys: (?P<sys>\d+), released: (?P<released>\d+), consumed: (?P<consumed>\d+) \(MB\)`
 )
 
 var (
-	gcre   = regexp.MustCompile(GCRegexp)
-	scvgre = regexp.MustCompile(SCVGRegexp)
+	gcrego14 = regexp.MustCompile(GCRegexpGo14)
+	gcrego15 = regexp.MustCompile(GCRegexpGo15)
+	scvgre   = regexp.MustCompile(SCVGRegexp)
 )
 
 type Parser struct {
 	reader   io.Reader
 	gcChan   chan *gctrace
 	scvgChan chan *scvgtrace
+
+	gcRegexp   *regexp.Regexp
+	scvgRegexp *regexp.Regexp
 }
 
 func (p *Parser) Run() {
 	sc := bufio.NewScanner(p.reader)
 
+	// Set regexp based on Golang version
+	if p.gcRegexp == nil {
+		if runtime.Version() == "go1.5" {
+			p.gcRegexp = gcrego15
+		} else {
+			p.gcRegexp = gcrego14
+		}
+	}
+
 	for sc.Scan() {
 		line := sc.Text()
 
-		if result := gcre.FindStringSubmatch(line); result != nil {
-			p.gcChan <- parseGCTrace(result)
+		if result := p.gcRegexp.FindStringSubmatch(line); result != nil {
+			p.gcChan <- parseGCTrace(p.gcRegexp, result)
 			continue
 		}
 
@@ -49,7 +64,7 @@ func (p *Parser) Run() {
 	}
 }
 
-func parseGCTrace(matches []string) *gctrace {
+func parseGCTrace(gcre *regexp.Regexp, matches []string) *gctrace {
 	matchMap := getMatchMap(gcre, matches)
 
 	return &gctrace{
