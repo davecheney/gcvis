@@ -1,4 +1,4 @@
-// gzvis is a tool to assist you visualising the operation of
+// gcvis is a tool to assist you visualising the operation of
 // the go runtime garbage collector.
 //
 // usage:
@@ -24,7 +24,7 @@ func indexHandler(w http.ResponseWriter, req *http.Request) {
 	gcvisGraph.write(w)
 }
 
-var iface = flag.String("i", "127.0.0.1", "specify interface to use.  defaults to 127.0.0.1.")
+var iface = flag.String("i", "127.0.0.1", "specify interface to use. defaults to 127.0.0.1.")
 
 func main() {
 
