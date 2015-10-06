@@ -35,10 +35,10 @@ func (g *Graph) setTmpl(tmplStr string) {
 	g.Tmpl = template.Must(template.New("vis").Parse(tmplStr))
 }
 
-func (g *Graph) write(w io.Writer) {
+func (g *Graph) Write(w io.Writer) error {
 	g.mu.RLock()
 	defer g.mu.RUnlock()
-	g.Tmpl.Execute(w, g)
+	return g.Tmpl.Execute(w, g)
 }
 
 func (g *Graph) AddGCTraceGraphPoint(gcTrace *gctrace) {
