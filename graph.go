@@ -10,10 +10,11 @@ import (
 type graphPoints [2]int64
 
 type Graph struct {
-	Title                                                             string
-	HeapUse, ScvgInuse, ScvgIdle, ScvgSys, ScvgReleased, ScvgConsumed []graphPoints
-	Tmpl                                                              *template.Template
-	mu                                                                sync.RWMutex
+	Title                               string
+	HeapUse, ScvgInuse, ScvgIdle        []graphPoints
+	ScvgSys, ScvgReleased, ScvgConsumed []graphPoints
+	Tmpl                                *template.Template `json:"-"`
+	mu                                  sync.RWMutex       `json:"-"`
 }
 
 func NewGraph(title, tmpl string) Graph {
