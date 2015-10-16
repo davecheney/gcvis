@@ -2,27 +2,43 @@ package main
 
 import (
 	"bufio"
-	"fmt"
 	"io"
-	"log"
 	"regexp"
 	"strconv"
 )
 
 const (
-	GCRegexp   = `gc\d+\(\d+\): \d+\+\d+\+\d+\+\d+ us, \d+ -> (?P<Heap1>\d+) MB, \d+ \(\d+-\d+\) objects,( \d+ goroutines,)? \d+\/\d+\/\d+ sweeps, \d+\(\d+\) handoff, \d+\(\d+\) steal, \d+\/\d+\/\d+ yields`
-	SCVGRegexp = `scvg\d+: inuse: (?P<inuse>\d+), idle: (?P<idle>\d+), sys: (?P<sys>\d+), released: (?P<released>\d+), consumed: (?P<consumed>\d+) \(MB\)`
+	GCRegexpGo14 = `gc\d+\(\d+\): ([\d.]+\+?)+ us, \d+ -> (?P<Heap1>\d+) MB, \d+ \(\d+-\d+\) objects,( \d+ goroutines,)? \d+\/\d+\/\d+ sweeps, \d+\(\d+\) handoff, \d+\(\d+\) steal, \d+\/\d+\/\d+ yields`
+	GCRegexpGo15 = `gc \d+ @[\d.]+s \d+%: [\d.+/]+ ms clock, [\d.+/]+ ms cpu, \d+->\d+->\d+ MB, (?P<Heap1>\d+) MB goal, \d+ P`
+	SCVGRegexp   = `scvg\d+: inuse: (?P<inuse>\d+), idle: (?P<idle>\d+), sys: (?P<sys>\d+), released: (?P<released>\d+), consumed: (?P<consumed>\d+) \(MB\)`
 )
 
 var (
-	gcre   = regexp.MustCompile(GCRegexp)
-	scvgre = regexp.MustCompile(SCVGRegexp)
+	gcrego14 = regexp.MustCompile(GCRegexpGo14)
+	gcrego15 = regexp.MustCompile(GCRegexpGo15)
+	scvgre   = regexp.MustCompile(SCVGRegexp)
 )
 
 type Parser struct {
-	reader   io.Reader
-	gcChan   chan *gctrace
-	scvgChan chan *scvgtrace
+	reader      io.Reader
+	GcChan      chan *gctrace
+	ScvgChan    chan *scvgtrace
+	NoMatchChan chan string
+	done        chan bool
+
+	Err error
+
+	scvgRegexp *regexp.Regexp
+}
+
+func NewParser(r io.Reader) *Parser {
+	return &Parser{
+		reader:      r,
+		GcChan:      make(chan *gctrace, 1),
+		ScvgChan:    make(chan *scvgtrace, 1),
+		NoMatchChan: make(chan string, 1),
+		done:        make(chan bool),
+	}
 }
 
 func (p *Parser) Run() {
@@ -31,25 +47,30 @@ func (p *Parser) Run() {
 	for sc.Scan() {
 		line := sc.Text()
 
-		if result := gcre.FindStringSubmatch(line); result != nil {
-			p.gcChan <- parseGCTrace(result)
+		if result := gcrego15.FindStringSubmatch(line); result != nil {
+			p.GcChan <- parseGCTrace(gcrego15, result)
+			continue
+		}
+
+		if result := gcrego14.FindStringSubmatch(line); result != nil {
+			p.GcChan <- parseGCTrace(gcrego14, result)
 			continue
 		}
 
 		if result := scvgre.FindStringSubmatch(line); result != nil {
-			p.scvgChan <- parseSCVGTrace(result)
+			p.ScvgChan <- parseSCVGTrace(result)
 			continue
 		}
 
-		fmt.Println(line)
+		p.NoMatchChan <- line
 	}
 
-	if err := sc.Err(); err != nil {
-		log.Fatal(err)
-	}
+	p.Err = sc.Err()
+
+	close(p.done)
 }
 
-func parseGCTrace(matches []string) *gctrace {
+func parseGCTrace(gcre *regexp.Regexp, matches []string) *gctrace {
 	matchMap := getMatchMap(gcre, matches)
 
 	return &gctrace{
