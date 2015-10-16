@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"io"
 	"regexp"
-	"runtime"
 	"strconv"
 )
 
@@ -29,7 +28,6 @@ type Parser struct {
 
 	Err error
 
-	gcRegexp   *regexp.Regexp
 	scvgRegexp *regexp.Regexp
 }
 
@@ -46,20 +44,16 @@ func NewParser(r io.Reader) *Parser {
 func (p *Parser) Run() {
 	sc := bufio.NewScanner(p.reader)
 
-	if p.gcRegexp == nil {
-		// Set regexp based on Golang version
-		if runtime.Version() == "go1.5" {
-			p.gcRegexp = gcrego15
-		} else {
-			p.gcRegexp = gcrego14
-		}
-	}
-
 	for sc.Scan() {
 		line := sc.Text()
 
-		if result := p.gcRegexp.FindStringSubmatch(line); result != nil {
-			p.GcChan <- parseGCTrace(p.gcRegexp, result)
+		if result := gcrego15.FindStringSubmatch(line); result != nil {
+			p.GcChan <- parseGCTrace(gcrego15, result)
+			continue
+		}
+
+		if result := gcrego14.FindStringSubmatch(line); result != nil {
+			p.GcChan <- parseGCTrace(gcrego14, result)
 			continue
 		}
 
