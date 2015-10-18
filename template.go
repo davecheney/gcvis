@@ -5,7 +5,6 @@ const (
 <html>
 <head>
 <title>gcvis - {{ .Title }}</title>
-<meta http-equiv="refresh" content="10">
 <script src="//cdnjs.cloudflare.com/ajax/libs/jquery/2.0.3/jquery.min.js"></script>
 <script src="//cdnjs.cloudflare.com/ajax/libs/flot/0.8.2/jquery.flot.min.js"></script>
 <script src="//cdnjs.cloudflare.com/ajax/libs/flot/0.8.2/jquery.flot.time.min.js"></script>
@@ -13,13 +12,14 @@ const (
 
 <script type="text/javascript">
 
+(function() {
 	var data = [
-    		{ label: "gc.heapinuse", data: {{ .HeapUse }} },
-    		{ label: "scvg.inuse", data: {{ .ScvgInuse }} },
-    		{ label: "scvg.idle", data: {{ .ScvgIdle }} },
-    		{ label: "scvg.sys", data: {{ .ScvgSys }} },
-    		{ label: "scvg.released", data: {{ .ScvgReleased }} },
-    		{ label: "scvg.consumed", data: {{ .ScvgConsumed }} },
+		{ label: "gc.heapinuse", data: {{ .HeapUse }} },
+		{ label: "scvg.inuse", data: {{ .ScvgInuse }} },
+		{ label: "scvg.idle", data: {{ .ScvgIdle }} },
+		{ label: "scvg.sys", data: {{ .ScvgSys }} },
+		{ label: "scvg.released", data: {{ .ScvgReleased }} },
+		{ label: "scvg.consumed", data: {{ .ScvgConsumed }} }
 	];
 
 	var options = {
@@ -39,60 +39,89 @@ const (
 	};
 
 	$(document).ready(function() {
+		var plot = $.plot("#placeholder", data, options);
 
-	var plot = $.plot("#placeholder", data, options);
-
-	var overview = $.plot("#overview", data, {
-		legend: { show: false},
-		series: {
-			lines: {
-				show: true,
-				lineWidth: 1
+		var overview = $.plot("#overview", data, {
+			legend: { show: false},
+			series: {
+				lines: {
+					show: true,
+					lineWidth: 1
+				},
+				shadowSize: 0
 			},
-			shadowSize: 0
-		},
-		xaxis: {
-			ticks: [],
-			mode: "time"
-		},
-		yaxis: {
-			ticks: [],
-			min: 0,
-			autoscaleMargin: 0.1
-		},
-		selection: {
-			mode: "x"
+			xaxis: {
+				ticks: [],
+				mode: "time"
+			},
+			yaxis: {
+				ticks: [],
+				min: 0,
+				autoscaleMargin: 0.1
+			},
+			selection: {
+				mode: "x"
+			}
+		});
+
+		// now connect the two
+		$("#placeholder").bind("plotselected", function (event, ranges) {
+
+			// do the zooming
+			$.each(plot.getXAxes(), function(_, axis) {
+				var opts = axis.options;
+				opts.min = ranges.xaxis.from;
+				opts.max = ranges.xaxis.to;
+			});
+			plot.setupGrid();
+			plot.draw();
+			plot.clearSelection();
+
+			// don't fire event on the overview to prevent eternal loop
+
+			overview.setSelection(ranges, true);
+		});
+
+		$("#overview").bind("plotselected", function (event, ranges) {
+			plot.setSelection(ranges);
+		});
+
+		// refresh data every second
+		pullAndRedraw();
+
+		function pullAndRedraw() {
+			$.get(window.location.href + 'graph.json', function(graphData) {
+				var data = [
+					{ label: "gc.heapinuse", data: graphData.HeapUse },
+					{ label: "scvg.inuse", data: graphData.ScvgInuse },
+					{ label: "scvg.idle", data: graphData.ScvgIdle },
+					{ label: "scvg.sys", data: graphData.ScvgSys },
+					{ label: "scvg.released", data: graphData.ScvgReleased },
+					{ label: "scvg.consumed", data: graphData.ScvgConsumed }
+				];
+
+				plot.setData(data);
+				plot.setupGrid();
+				plot.draw();
+
+				overview.setData(data);
+				overview.setupGrid();
+				overview.draw();
+
+				setTimeout(pullAndRedraw, 1000);
+			})
 		}
 	});
-
-	// now connect the two
-	$("#placeholder").bind("plotselected", function (event, ranges) {
-
-		// do the zooming
-		$.each(plot.getXAxes(), function(_, axis) {
-			var opts = axis.options;
-			opts.min = ranges.xaxis.from;
-			opts.max = ranges.xaxis.to;
-		});
-		plot.setupGrid();
-		plot.draw();
-		plot.clearSelection();
-
-		// don't fire event on the overview to prevent eternal loop
-
-		overview.setSelection(ranges, true);
-	});
-
-	$("#overview").bind("plotselected", function (event, ranges) {
-		plot.setSelection(ranges);
-	});
-
-	});
+})();
 </script>
 <style>
 #content {
 	margin: 0 auto;
 	padding: 10px;
+}
+
+#export {
+	float: right;
 }
 
 .demo-container {
@@ -125,6 +154,9 @@ const (
 </head>
 <body>
 <pre>{{ .Title }}</pre>
+<div id="export">
+	<a href="/graph.json">json</a>
+</div>
 <div id="content">
 
 	<div class="demo-container">

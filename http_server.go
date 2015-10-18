@@ -37,6 +37,7 @@ func (h *HttpServer) Start() {
 	})
 
 	serveMux.HandleFunc("/graph.json", func(w http.ResponseWriter, req *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
 		encoder := json.NewEncoder(w)
 		if err := encoder.Encode(h.graph); err != nil {
 			log.Fatal("An error occurred while serving JSON endpoint: %v", err)
