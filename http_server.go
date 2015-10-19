@@ -1,11 +1,13 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"net"
 	"net/http"
 	"sync"
+	"time"
 )
 
 type HttpServer struct {
@@ -28,10 +30,27 @@ func NewHttpServer(iface string, port string, graph *Graph) *HttpServer {
 }
 
 func (h *HttpServer) Start() {
-	http.HandleFunc("/", func(w http.ResponseWriter, req *http.Request) {
+	serveMux := http.NewServeMux()
+
+	serveMux.HandleFunc("/", func(w http.ResponseWriter, req *http.Request) {
 		h.graph.Write(w)
 	})
-	http.Serve(h.Listener(), nil)
+
+	serveMux.HandleFunc("/graph.json", func(w http.ResponseWriter, req *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		encoder := json.NewEncoder(w)
+		if err := encoder.Encode(h.graph); err != nil {
+			log.Fatal("An error occurred while serving JSON endpoint: %v", err)
+		}
+	})
+
+	server := http.Server{
+		Handler:      serveMux,
+		ReadTimeout:  10 * time.Second,
+		WriteTimeout: 10 * time.Second,
+	}
+
+	server.Serve(h.Listener())
 }
 
 func (h *HttpServer) Close() {
