@@ -16,6 +16,25 @@ func runParserWith(line string) *Parser {
 	return parser
 }
 
+func TestParserWithMatchingInputGo16(t *testing.T) {
+	line := "gc #88 @3.243s 9%: 0.040+16+1.0+5.9+0.34 ms clock, 0.16+16+0+18/5.7/11+1.3 ms cpu, 32->33->19 MB, 33 MB goal, 4 P"
+
+	runParserWith(line)
+
+	expectedGCTrace := &gctrace{
+		Heap1: 33,
+	}
+
+	select {
+	case gctrace := <-parser.GcChan:
+		if !reflect.DeepEqual(gctrace, expectedGCTrace) {
+			t.Errorf("Expected gctrace to equal %+v. Got %+v instead.", expectedGCTrace, gctrace)
+		}
+	case <-time.After(100 * time.Millisecond):
+		t.Fatalf("Execution timed out.")
+	}
+}
+
 func TestParserWithMatchingInputGo15(t *testing.T) {
 	line := "gc 88 @3.243s 9%: 0.040+16+1.0+5.9+0.34 ms clock, 0.16+16+0+18/5.7/11+1.3 ms cpu, 32->33->19 MB, 33 MB goal, 4 P"
 
