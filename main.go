@@ -9,6 +9,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"strings"
@@ -25,18 +26,22 @@ func main() {
 		flag.PrintDefaults()
 	}
 
+	var pipeRead io.ReadCloser
+	var subcommand SubCommand
+
 	flag.Parse()
 	if len(flag.Args()) < 1 {
-		flag.Usage()
-		return
+		pipeRead = os.Stdin
+	} else {
+		subcommand := NewSubCommand(flag.Args())
+		pipeRead = subcommand.PipeRead
+		go subcommand.Run()
 	}
 
-	subcommand := NewSubCommand(flag.Args())
-	parser := NewParser(subcommand.PipeRead)
+	parser := NewParser(pipeRead)
 	gcvisGraph := NewGraph(strings.Join(flag.Args(), " "), GCVIS_TMPL)
 	server := NewHttpServer(*iface, *port, &gcvisGraph)
 
-	go subcommand.Run()
 	go parser.Run()
 	go server.Start()
 
@@ -58,12 +63,14 @@ func main() {
 				os.Exit(1)
 			}
 
-			if subcommand.Err() != nil {
-				fmt.Fprintf(os.Stderr, subcommand.Err().Error())
-				os.Exit(1)
-			}
-
-			os.Exit(0)
+			break
 		}
 	}
+
+	if subcommand.cmd != nil && subcommand.Err() != nil {
+		fmt.Fprintf(os.Stderr, subcommand.Err().Error())
+		os.Exit(1)
+	}
+
+	os.Exit(0)
 }
