@@ -17,7 +17,7 @@ type SubCommand struct {
 	errMtx sync.Mutex
 }
 
-func NewSubCommand(args []string) SubCommand {
+func NewSubCommand(args []string) *SubCommand {
 	pipeRead, pipeWrite, err := os.Pipe()
 	if err != nil {
 		log.Fatal(err)
@@ -30,7 +30,7 @@ func NewSubCommand(args []string) SubCommand {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = pipeWrite
 
-	return SubCommand{
+	return &SubCommand{
 		cmd:       cmd,
 		PipeRead:  pipeRead,
 		pipeWrite: pipeWrite,

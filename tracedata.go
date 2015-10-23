@@ -1,15 +1,16 @@
 package main
 
 type scvgtrace struct {
-	inuse    int64
-	idle     int64
-	sys      int64
-	released int64
-	consumed int64
+	ElapsedTime float64 // in seconds
+	inuse       int64
+	idle        int64
+	sys         int64
+	released    int64
+	consumed    int64
 }
 
 type gctrace struct {
-	ElapsedTime float32 // in seconds
+	ElapsedTime float64 // in seconds
 	NumGC       int64
 	Nproc       int64
 	t1          int64

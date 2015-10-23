@@ -115,11 +115,11 @@ func silentParseInt(value string) int64 {
 	return intVal
 }
 
-func silentParseFloat(value string) float32 {
-	floatVal, err := strconv.ParseFloat(value, 32)
+func silentParseFloat(value string) float64 {
+	floatVal, err := strconv.ParseFloat(value, 64)
 	if err != nil {
-		return float32(0)
+		return float64(0)
 	}
 
-	return float32(floatVal)
+	return float64(floatVal)
 }

@@ -15,6 +15,8 @@ import (
 	"strings"
 
 	"github.com/pkg/browser"
+
+	"golang.org/x/crypto/ssh/terminal"
 )
 
 var iface = flag.String("i", "127.0.0.1", "specify interface to use. defaults to 127.0.0.1.")
@@ -27,11 +29,16 @@ func main() {
 	}
 
 	var pipeRead io.ReadCloser
-	var subcommand SubCommand
+	var subcommand *SubCommand
 
 	flag.Parse()
 	if len(flag.Args()) < 1 {
-		pipeRead = os.Stdin
+		if terminal.IsTerminal(int(os.Stdin.Fd())) {
+			flag.Usage()
+			return
+		} else {
+			pipeRead = os.Stdin
+		}
 	} else {
 		subcommand := NewSubCommand(flag.Args())
 		pipeRead = subcommand.PipeRead
@@ -67,7 +74,7 @@ func main() {
 		}
 	}
 
-	if subcommand.cmd != nil && subcommand.Err() != nil {
+	if subcommand != nil && subcommand.Err() != nil {
 		fmt.Fprintf(os.Stderr, subcommand.Err().Error())
 		os.Exit(1)
 	}
