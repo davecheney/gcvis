@@ -9,6 +9,7 @@ type scvgtrace struct {
 }
 
 type gctrace struct {
+	ElapsedTime float32 // in seconds
 	NumGC       int64
 	Nproc       int64
 	t1          int64

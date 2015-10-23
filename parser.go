@@ -9,7 +9,7 @@ import (
 
 const (
 	GCRegexpGo14 = `gc\d+\(\d+\): ([\d.]+\+?)+ us, \d+ -> (?P<Heap1>\d+) MB, \d+ \(\d+-\d+\) objects,( \d+ goroutines,)? \d+\/\d+\/\d+ sweeps, \d+\(\d+\) handoff, \d+\(\d+\) steal, \d+\/\d+\/\d+ yields`
-	GCRegexpGo15 = `gc #?\d+ @[\d.]+s \d+%: [\d.+/]+ ms clock, [\d.+/]+ ms cpu, \d+->\d+->\d+ MB, (?P<Heap1>\d+) MB goal, \d+ P`
+	GCRegexpGo15 = `gc #?\d+ @(?P<ElapsedTime>[\d.]+)s \d+%: [\d.+/]+ ms clock, [\d.+/]+ ms cpu, \d+->\d+->\d+ MB, (?P<Heap1>\d+) MB goal, \d+ P`
 	SCVGRegexp   = `scvg\d+: inuse: (?P<inuse>\d+), idle: (?P<idle>\d+), sys: (?P<sys>\d+), released: (?P<released>\d+), consumed: (?P<consumed>\d+) \(MB\)`
 )
 
@@ -74,7 +74,8 @@ func parseGCTrace(gcre *regexp.Regexp, matches []string) *gctrace {
 	matchMap := getMatchMap(gcre, matches)
 
 	return &gctrace{
-		Heap1: matchMap["Heap1"],
+		Heap1:       silentParseInt(matchMap["Heap1"]),
+		ElapsedTime: silentParseFloat(matchMap["ElapsedTime"]),
 	}
 }
 
@@ -82,31 +83,43 @@ func parseSCVGTrace(matches []string) *scvgtrace {
 	matchMap := getMatchMap(scvgre, matches)
 
 	return &scvgtrace{
-		inuse:    matchMap["inuse"],
-		idle:     matchMap["idle"],
-		sys:      matchMap["sys"],
-		released: matchMap["released"],
-		consumed: matchMap["consumed"],
+		inuse:    silentParseInt(matchMap["inuse"]),
+		idle:     silentParseInt(matchMap["idle"]),
+		sys:      silentParseInt(matchMap["sys"]),
+		released: silentParseInt(matchMap["released"]),
+		consumed: silentParseInt(matchMap["consumed"]),
 	}
 }
 
 // Transform our matches in a readable hash map.
 //
 // The resulting hash map will be something like { "Heap1": 123 }
-func getMatchMap(re *regexp.Regexp, matches []string) map[string]int64 {
-	matchingNames := re.SubexpNames()
-	matchMap := map[string]int64{}
-	for i, value := range matches {
-		intVal, err := strconv.ParseInt(value, 10, 64)
-		if err != nil {
-			// Happens on first element of range and any matching parenthesis
-			// that includes non-parseable string
-			//
-			// For example a matching array would contain:
-			// [ "scvg1: inuse:3 ..." "3" ]
+func getMatchMap(re *regexp.Regexp, matches []string) map[string]string {
+	matchingNames := re.SubexpNames()[1:]
+	matchMap := map[string]string{}
+	for i, value := range matches[1:] {
+		if matchingNames[i] == "" {
 			continue
 		}
-		matchMap[matchingNames[i]] = intVal
+		matchMap[matchingNames[i]] = value
 	}
 	return matchMap
+}
+
+func silentParseInt(value string) int64 {
+	intVal, err := strconv.ParseInt(value, 10, 64)
+	if err != nil {
+		return 0
+	}
+
+	return intVal
+}
+
+func silentParseFloat(value string) float32 {
+	floatVal, err := strconv.ParseFloat(value, 32)
+	if err != nil {
+		return float32(0)
+	}
+
+	return float32(floatVal)
 }
