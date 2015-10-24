@@ -40,7 +40,7 @@ func main() {
 			pipeRead = os.Stdin
 		}
 	} else {
-		subcommand := NewSubCommand(flag.Args())
+		subcommand = NewSubCommand(flag.Args())
 		pipeRead = subcommand.PipeRead
 		go subcommand.Run()
 	}
