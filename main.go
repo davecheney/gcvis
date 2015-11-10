@@ -21,6 +21,7 @@ import (
 
 var iface = flag.String("i", "127.0.0.1", "specify interface to use. defaults to 127.0.0.1.")
 var port = flag.String("p", "0", "specify port to use.")
+var openBrowser = flag.Bool("o", true, "automatically open browser")
 
 func main() {
 	flag.Usage = func() {
@@ -53,8 +54,13 @@ func main() {
 	go server.Start()
 
 	url := server.Url()
-	log.Printf("opening browser window, if this fails, navigate to %s", url)
-	browser.OpenURL(url)
+
+	if *openBrowser {
+		log.Printf("opening browser window, if this fails, navigate to %s", url)
+		browser.OpenURL(url)
+	} else {
+		log.Printf("server started on %s", url)
+	}
 
 	for {
 		select {
