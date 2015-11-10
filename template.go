@@ -27,6 +27,12 @@ const (
 			noColumns: 2,
 			backgroundOpacity: 0.2
 		},
+		yaxis: {
+			tickFormatter: function(val) { return val + "MB"; }
+		},
+		xaxis: {
+			tickFormatter: function(val) { return val + "s"; }
+		},
 		selection: {
 			mode: "x"
 		},
