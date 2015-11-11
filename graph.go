@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-type graphPoints [2]int64
+type graphPoints [2]float64
 
 type Graph struct {
 	Title                               string
@@ -16,6 +16,8 @@ type Graph struct {
 	Tmpl                                *template.Template `json:"-"`
 	mu                                  sync.RWMutex       `json:"-"`
 }
+
+var StartTime = time.Now()
 
 func NewGraph(title, tmpl string) Graph {
 	g := Graph{
@@ -45,17 +47,27 @@ func (g *Graph) Write(w io.Writer) error {
 func (g *Graph) AddGCTraceGraphPoint(gcTrace *gctrace) {
 	g.mu.RLock()
 	defer g.mu.RUnlock()
-	ts := int64(time.Now().UnixNano() / 1e6)
-	g.HeapUse = append(g.HeapUse, graphPoints{ts, gcTrace.Heap1})
+	var elapsedTime float64
+	if gcTrace.ElapsedTime == 0 {
+		elapsedTime = time.Now().Sub(StartTime).Seconds()
+	} else {
+		elapsedTime = gcTrace.ElapsedTime
+	}
+	g.HeapUse = append(g.HeapUse, graphPoints{elapsedTime, float64(gcTrace.Heap1)})
 }
 
 func (g *Graph) AddScavengerGraphPoint(scvg *scvgtrace) {
 	g.mu.RLock()
 	defer g.mu.RUnlock()
-	ts := int64(time.Now().UnixNano() / 1e6)
-	g.ScvgInuse = append(g.ScvgInuse, graphPoints{ts, scvg.inuse})
-	g.ScvgIdle = append(g.ScvgIdle, graphPoints{ts, scvg.idle})
-	g.ScvgSys = append(g.ScvgSys, graphPoints{ts, scvg.sys})
-	g.ScvgReleased = append(g.ScvgReleased, graphPoints{ts, scvg.released})
-	g.ScvgConsumed = append(g.ScvgConsumed, graphPoints{ts, scvg.consumed})
+	var elapsedTime float64
+	if scvg.ElapsedTime == 0 {
+		elapsedTime = time.Now().Sub(StartTime).Seconds()
+	} else {
+		elapsedTime = scvg.ElapsedTime
+	}
+	g.ScvgInuse = append(g.ScvgInuse, graphPoints{elapsedTime, float64(scvg.inuse)})
+	g.ScvgIdle = append(g.ScvgIdle, graphPoints{elapsedTime, float64(scvg.idle)})
+	g.ScvgSys = append(g.ScvgSys, graphPoints{elapsedTime, float64(scvg.sys)})
+	g.ScvgReleased = append(g.ScvgReleased, graphPoints{elapsedTime, float64(scvg.released)})
+	g.ScvgConsumed = append(g.ScvgConsumed, graphPoints{elapsedTime, float64(scvg.consumed)})
 }

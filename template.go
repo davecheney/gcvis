@@ -7,7 +7,6 @@ const (
 <title>gcvis - {{ .Title }}</title>
 <script src="//cdnjs.cloudflare.com/ajax/libs/jquery/2.0.3/jquery.min.js"></script>
 <script src="//cdnjs.cloudflare.com/ajax/libs/flot/0.8.2/jquery.flot.min.js"></script>
-<script src="//cdnjs.cloudflare.com/ajax/libs/flot/0.8.2/jquery.flot.time.min.js"></script>
 <script src="//cdnjs.cloudflare.com/ajax/libs/flot/0.8.2/jquery.flot.selection.min.js"></script>
 
 <script type="text/javascript">
@@ -28,10 +27,11 @@ const (
 			noColumns: 2,
 			backgroundOpacity: 0.2
 		},
+		yaxis: {
+			tickFormatter: function(val) { return val + "MB"; }
+		},
 		xaxis: {
-			mode: "time",
-			timezone: "browser",
-			timeformat: "%H:%M:%S "
+			tickFormatter: function(val) { return val + "s"; }
 		},
 		selection: {
 			mode: "x"
@@ -52,7 +52,8 @@ const (
 			},
 			xaxis: {
 				ticks: [],
-				mode: "time"
+				min: 0,
+				autoscaleMargin: 0.1
 			},
 			yaxis: {
 				ticks: [],

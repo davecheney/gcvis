@@ -22,7 +22,8 @@ func TestParserWithMatchingInputGo16(t *testing.T) {
 	runParserWith(line)
 
 	expectedGCTrace := &gctrace{
-		Heap1: 33,
+		Heap1:       33,
+		ElapsedTime: 3.243,
 	}
 
 	select {
@@ -41,7 +42,8 @@ func TestParserWithMatchingInputGo15(t *testing.T) {
 	runParserWith(line)
 
 	expectedGCTrace := &gctrace{
-		Heap1: 33,
+		Heap1:       33,
+		ElapsedTime: 3.243,
 	}
 
 	select {

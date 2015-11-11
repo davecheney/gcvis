@@ -9,15 +9,19 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"strings"
 
 	"github.com/pkg/browser"
+
+	"golang.org/x/crypto/ssh/terminal"
 )
 
 var iface = flag.String("i", "127.0.0.1", "specify interface to use. defaults to 127.0.0.1.")
 var port = flag.String("p", "0", "specify port to use.")
+var openBrowser = flag.Bool("o", true, "automatically open browser")
 
 func main() {
 	flag.Usage = func() {
@@ -25,24 +29,38 @@ func main() {
 		flag.PrintDefaults()
 	}
 
+	var pipeRead io.ReadCloser
+	var subcommand *SubCommand
+
 	flag.Parse()
 	if len(flag.Args()) < 1 {
-		flag.Usage()
-		return
+		if terminal.IsTerminal(int(os.Stdin.Fd())) {
+			flag.Usage()
+			return
+		} else {
+			pipeRead = os.Stdin
+		}
+	} else {
+		subcommand = NewSubCommand(flag.Args())
+		pipeRead = subcommand.PipeRead
+		go subcommand.Run()
 	}
 
-	subcommand := NewSubCommand(flag.Args())
-	parser := NewParser(subcommand.PipeRead)
+	parser := NewParser(pipeRead)
 	gcvisGraph := NewGraph(strings.Join(flag.Args(), " "), GCVIS_TMPL)
 	server := NewHttpServer(*iface, *port, &gcvisGraph)
 
-	go subcommand.Run()
 	go parser.Run()
 	go server.Start()
 
 	url := server.Url()
-	log.Printf("opening browser window, if this fails, navigate to %s", url)
-	browser.OpenURL(url)
+
+	if *openBrowser {
+		log.Printf("opening browser window, if this fails, navigate to %s", url)
+		browser.OpenURL(url)
+	} else {
+		log.Printf("server started on %s", url)
+	}
 
 	for {
 		select {
@@ -58,12 +76,14 @@ func main() {
 				os.Exit(1)
 			}
 
-			if subcommand.Err() != nil {
-				fmt.Fprintf(os.Stderr, subcommand.Err().Error())
-				os.Exit(1)
-			}
-
-			os.Exit(0)
+			break
 		}
 	}
+
+	if subcommand != nil && subcommand.Err() != nil {
+		fmt.Fprintf(os.Stderr, subcommand.Err().Error())
+		os.Exit(1)
+	}
+
+	os.Exit(0)
 }
