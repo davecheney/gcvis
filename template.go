@@ -39,10 +39,12 @@ const (
 		},
 	};
 
-	var timingsgraph_data = [
+	var clockgraph_data = [
 		{ label: "STW sweep clock", data: {{ .STWSclock }} },
 		{ label: "con mas clock", data: {{ .MASclock }} },
 		{ label: "STW mark clock", data: {{ .STWMclock }} },
+	];
+	var cpugraph_data = [
 		{ label: "STW sweep cpu", data: {{ .STWScpu }} },
 		{ label: "con mas assist cpu", data: {{ .MASAssistcpu }} },
 		{ label: "con mas bg cpu", data: {{ .MASBGcpu }} },
@@ -68,18 +70,17 @@ const (
 		series: {
 			stack: 0,
 			lines: {
-				show: false,
-			},
-			bars: {
 				show: true,
-				barWidth: 0.6
-			}
+				fill:true,
+				lineWidth: 0,
+			},
 		},
 	};
 
 	$(document).ready(function() {
 		var datagraph = $.plot("#datagraph", datagraph_data, datagraph_options);
-		var timingsgraph = $.plot("#timingsgraph", timingsgraph_data, timingsgraph_options);
+		var clockgraph = $.plot("#clockgraph", clockgraph_data, timingsgraph_options);
+		var cpugraph = $.plot("#cpugraph", cpugraph_data, timingsgraph_options);
 
 		var overview = $.plot("#overview", {}, {
 			legend: { show: false},
@@ -105,7 +106,7 @@ const (
 			}
 		});
 
-		// now connect the three
+		// now connect the four
 		$("#datagraph").bind("plotselected", function (event, ranges) {
 
 			// do the zooming
@@ -119,32 +120,53 @@ const (
 			datagraph.clearSelection();
 
 			// don't fire event on the overview to prevent eternal loop
-
 			overview.setSelection(ranges, true);
-			timingsgraph.setSelection(ranges, true);
+			clockgraph.setSelection(ranges, true);
+			cpugraph.setSelection(ranges, true);
 		});
 
-		$("#timingsgraph").bind("plotselected", function (event, ranges) {
+		$("#clockgraph").bind("plotselected", function (event, ranges) {
 
 			// do the zooming
-			$.each(timingsgraph.getXAxes(), function(_, axis) {
+			$.each(clockgraph.getXAxes(), function(_, axis) {
 				var opts = axis.options;
 				opts.min = ranges.xaxis.from;
 				opts.max = ranges.xaxis.to;
 			});
-			timingsgraph.setupGrid();
-			timingsgraph.draw();
-			timingsgraph.clearSelection();
+			clockgraph.setupGrid();
+			clockgraph.draw();
+			clockgraph.clearSelection();
 
 			// don't fire event on the overview to prevent eternal loop
 
 			overview.setSelection(ranges, true);
 			datagraph.setSelection(ranges, true);
+			cpugraph.setSelection(ranges, true);
+		});
+
+		$("#cpugraph").bind("plotselected", function (event, ranges) {
+
+			// do the zooming
+			$.each(cpugraph.getXAxes(), function(_, axis) {
+				var opts = axis.options;
+				opts.min = ranges.xaxis.from;
+				opts.max = ranges.xaxis.to;
+			});
+			cpugraph.setupGrid();
+			cpugraph.draw();
+			cpugraph.clearSelection();
+
+			// don't fire event on the overview to prevent eternal loop
+
+			overview.setSelection(ranges, true);
+			datagraph.setSelection(ranges, true);
+			clockraph.setSelection(ranges, true);
 		});
 
 		$("#overview").bind("plotselected", function (event, ranges) {
 			datagraph.setSelection(ranges);
-			timingsgraph.setSelection(ranges);
+			clockgraph.setSelection(ranges);
+			cpugraph.setSelection(ranges);
 		});
 
 		// refresh data every second
@@ -160,10 +182,12 @@ const (
 					{ label: "scvg.released", data: graphData.ScvgReleased },
 					{ label: "scvg.consumed", data: graphData.ScvgConsumed }
 				];
-				var timingsgraph_data = [
+				var clockgraph_data = [
 					{ label: "STW sweep clock",    data: graphData.STWSclock },
 					{ label: "con mas clock",      data: graphData.MASclock },
 					{ label: "STW mark clock",     data: graphData.STWMclock },
+				];
+				var cpugraph_data = [
 					{ label: "STW sweep cpu",      data: graphData.STWScpu },
 					{ label: "con mas assist cpu", data: graphData.MASAssistcpu },
 					{ label: "con mas bg cpu",     data: graphData.MASBGcpu },
@@ -175,7 +199,15 @@ const (
 				datagraph.setupGrid();
 				datagraph.draw();
 
-				overview.setData(timingsgraph_data);
+				clockgraph.setData(clockgraph_data);
+				clockgraph.setupGrid();
+				clockgraph.draw();
+
+				cpugraph.setData(cpugraph_data);
+				cpugraph.setupGrid();
+				cpugraph.draw();
+
+				overview.setData(datagraph_data);
 				overview.setupGrid();
 				overview.draw();
 
@@ -200,7 +232,27 @@ dd { margin-left: 160px; }
 .graph-container {
 	box-sizing: border-box;
 	width: 1200px;
-	height: 450px;
+	height: 340px;
+	padding: 20px 15px 15px 15px;
+	margin: 15px auto 30px auto;
+	border: 1px solid #ddd;
+	background: #fff;
+	background: linear-gradient(#f6f6f6 0, #fff 50px);
+	background: -o-linear-gradient(#f6f6f6 0, #fff 50px);
+	background: -ms-linear-gradient(#f6f6f6 0, #fff 50px);
+	background: -moz-linear-gradient(#f6f6f6 0, #fff 50px);
+	background: -webkit-linear-gradient(#f6f6f6 0, #fff 50px);
+	box-shadow: 0 3px 10px rgba(0,0,0,0.15);
+	-o-box-shadow: 0 3px 10px rgba(0,0,0,0.1);
+	-ms-box-shadow: 0 3px 10px rgba(0,0,0,0.1);
+	-moz-box-shadow: 0 3px 10px rgba(0,0,0,0.1);
+	-webkit-box-shadow: 0 3px 10px rgba(0,0,0,0.1);
+}
+
+.small-graph-container {
+	box-sizing: border-box;
+	width: 1200px;
+	height: 220px;
 	padding: 20px 15px 15px 15px;
 	margin: 15px auto 30px auto;
 	border: 1px solid #ddd;
@@ -257,8 +309,12 @@ dd { margin-left: 160px; }
 		<div id="datagraph" class="demo-placeholder"></div>
 	</div>
 
-	<div class="graph-container">
-		<div id="timingsgraph" class="demo-placeholder"></div>
+	<div class="small-graph-container">
+		<div id="clockgraph" class="demo-placeholder"></div>
+	</div>
+
+	<div class="small-graph-container">
+		<div id="cpugraph" class="demo-placeholder"></div>
 	</div>
 
 	<div class="legend-container" style="height:60px;">
