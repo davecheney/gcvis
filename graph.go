@@ -13,6 +13,14 @@ type Graph struct {
 	Title                               string
 	HeapUse, ScvgInuse, ScvgIdle        []graphPoints
 	ScvgSys, ScvgReleased, ScvgConsumed []graphPoints
+	STWSclock                           []graphPoints
+	MASclock                            []graphPoints
+	STWMclock                           []graphPoints
+	STWScpu                             []graphPoints
+	MASAssistcpu                        []graphPoints
+	MASBGcpu                            []graphPoints
+	MASIdlecpu                          []graphPoints
+	STWMcpu                             []graphPoints
 	Tmpl                                *template.Template `json:"-"`
 	mu                                  sync.RWMutex       `json:"-"`
 }
@@ -28,6 +36,14 @@ func NewGraph(title, tmpl string) Graph {
 		ScvgSys:      []graphPoints{},
 		ScvgReleased: []graphPoints{},
 		ScvgConsumed: []graphPoints{},
+		STWSclock:    []graphPoints{},
+		MASclock:     []graphPoints{},
+		STWMclock:    []graphPoints{},
+		STWScpu:      []graphPoints{},
+		MASAssistcpu: []graphPoints{},
+		MASBGcpu:     []graphPoints{},
+		MASIdlecpu:   []graphPoints{},
+		STWMcpu:      []graphPoints{},
 	}
 	g.setTmpl(tmpl)
 
@@ -54,6 +70,14 @@ func (g *Graph) AddGCTraceGraphPoint(gcTrace *gctrace) {
 		elapsedTime = gcTrace.ElapsedTime
 	}
 	g.HeapUse = append(g.HeapUse, graphPoints{elapsedTime, float64(gcTrace.Heap1)})
+	g.STWSclock = append(g.STWSclock, graphPoints{elapsedTime, float64(gcTrace.STWSclock)})
+	g.MASclock = append(g.MASclock, graphPoints{elapsedTime, float64(gcTrace.MASclock)})
+	g.STWMclock = append(g.STWMclock, graphPoints{elapsedTime, float64(gcTrace.STWMclock)})
+	g.STWScpu = append(g.STWScpu, graphPoints{elapsedTime, float64(gcTrace.STWScpu)})
+	g.MASAssistcpu = append(g.MASAssistcpu, graphPoints{elapsedTime, float64(gcTrace.MASAssistcpu)})
+	g.MASBGcpu = append(g.MASBGcpu, graphPoints{elapsedTime, float64(gcTrace.MASBGcpu)})
+	g.MASIdlecpu = append(g.MASIdlecpu, graphPoints{elapsedTime, float64(gcTrace.MASIdlecpu)})
+	g.STWMcpu = append(g.STWMcpu, graphPoints{elapsedTime, float64(gcTrace.STWMcpu)})
 }
 
 func (g *Graph) AddScavengerGraphPoint(scvg *scvgtrace) {
