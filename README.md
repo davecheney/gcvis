@@ -2,6 +2,8 @@
 
 Visualise Go program gctrace data in real time
 
+Note: GC timing graphs are only supported for go 1.6
+
 ## Usage
 
 Running it directly:
