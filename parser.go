@@ -10,12 +10,15 @@ import (
 const (
 	GCRegexpGo14 = `gc\d+\(\d+\): ([\d.]+\+?)+ us, \d+ -> (?P<Heap1>\d+) MB, \d+ \(\d+-\d+\) objects,( \d+ goroutines,)? \d+\/\d+\/\d+ sweeps, \d+\(\d+\) handoff, \d+\(\d+\) steal, \d+\/\d+\/\d+ yields`
 	GCRegexpGo15 = `gc #?\d+ @(?P<ElapsedTime>[\d.]+)s \d+%: [\d.+/]+ ms clock, [\d.+/]+ ms cpu, \d+->\d+->\d+ MB, (?P<Heap1>\d+) MB goal, \d+ P`
-	SCVGRegexp   = `scvg\d+: inuse: (?P<inuse>\d+), idle: (?P<idle>\d+), sys: (?P<sys>\d+), released: (?P<released>\d+), consumed: (?P<consumed>\d+) \(MB\)`
+	GCRegexpGo16 = `gc #?\d+ @(?P<ElapsedTime>[\d.]+)s \d+%: (?P<STWSclock>[^+]+)\+(?P<MASclock>[^+]+)\+(?P<STWMclock>[^+]+) ms clock, (?P<STWScpu>[^+]+)\+(?P<MASAssistcpu>[^+]+)/(?P<MASBGcpu>[^+]+)/(?P<MASIdlecpu>[^+]+)\+(?P<STWMcpu>[^+]+) ms cpu, \d+->\d+->\d+ MB, (?P<Heap1>\d+) MB goal, \d+ P`
+
+	SCVGRegexp = `scvg\d+: inuse: (?P<inuse>\d+), idle: (?P<idle>\d+), sys: (?P<sys>\d+), released: (?P<released>\d+), consumed: (?P<consumed>\d+) \(MB\)`
 )
 
 var (
 	gcrego14 = regexp.MustCompile(GCRegexpGo14)
 	gcrego15 = regexp.MustCompile(GCRegexpGo15)
+	gcrego16 = regexp.MustCompile(GCRegexpGo16)
 	scvgre   = regexp.MustCompile(SCVGRegexp)
 )
 
@@ -46,6 +49,10 @@ func (p *Parser) Run() {
 
 	for sc.Scan() {
 		line := sc.Text()
+		if result := gcrego16.FindStringSubmatch(line); result != nil {
+			p.GcChan <- parseGCTrace(gcrego16, result)
+			continue
+		}
 
 		if result := gcrego15.FindStringSubmatch(line); result != nil {
 			p.GcChan <- parseGCTrace(gcrego15, result)
@@ -74,8 +81,16 @@ func parseGCTrace(gcre *regexp.Regexp, matches []string) *gctrace {
 	matchMap := getMatchMap(gcre, matches)
 
 	return &gctrace{
-		Heap1:       silentParseInt(matchMap["Heap1"]),
-		ElapsedTime: silentParseFloat(matchMap["ElapsedTime"]),
+		Heap1:        silentParseInt(matchMap["Heap1"]),
+		ElapsedTime:  silentParseFloat(matchMap["ElapsedTime"]),
+		STWSclock:    silentParseFloat(matchMap["STWSclock"]),
+		MASclock:     silentParseFloat(matchMap["MASclock"]),
+		STWMclock:    silentParseFloat(matchMap["STWMclock"]),
+		STWScpu:      silentParseFloat(matchMap["STWScpu"]),
+		MASAssistcpu: silentParseFloat(matchMap["MASAssistcpu"]),
+		MASBGcpu:     silentParseFloat(matchMap["MASBGcpu"]),
+		MASIdlecpu:   silentParseFloat(matchMap["MASIdlecpu"]),
+		STWMcpu:      silentParseFloat(matchMap["STWMcpu"]),
 	}
 }
 
