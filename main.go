@@ -76,7 +76,7 @@ func main() {
 				os.Exit(1)
 			}
 
-			break
+			os.Exit(0)
 		}
 	}
 
