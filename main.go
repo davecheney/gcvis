@@ -47,7 +47,13 @@ func main() {
 	}
 
 	parser := NewParser(pipeRead)
-	gcvisGraph := NewGraph(strings.Join(flag.Args(), " "), GCVIS_TMPL)
+
+	title := strings.Join(flag.Args(), " ")
+	if len(title) == 0 {
+		title = fmt.Sprintf("%s:%s", *iface, *port)
+	}
+
+	gcvisGraph := NewGraph(title, GCVIS_TMPL)
 	server := NewHttpServer(*iface, *port, &gcvisGraph)
 
 	go parser.Run()
