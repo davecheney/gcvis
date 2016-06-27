@@ -42,3 +42,7 @@ type gctrace struct {
 	MASIdlecpu   float64
 	STWMcpu      float64
 }
+
+type goroutine struct {
+	count int64
+}

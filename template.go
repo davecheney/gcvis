@@ -39,6 +39,7 @@ const (
 		},
 	};
 
+
 	var clockgraph_data = [
 		{ label: "STW sweep clock", data: {{ .STWSclock }} },
 		{ label: "con mas clock", data: {{ .MASclock }} },
@@ -51,6 +52,7 @@ const (
 		{ label: "con mas idle cpu", data: {{ .MASIdlecpu }} },
 		{ label: "STW mark cpu", data: {{ .STWMcpu }} },
 	];
+
 
 	var timingsgraph_options = {
 		legend: {
@@ -77,10 +79,40 @@ const (
 		},
 	};
 
+	var goroutinegraph_data = [
+		{ label: "Goroutine count", data: {{ .GoroutineCount }} },
+	];
+
+	var numgraph_options = {
+		legend: {
+			position: "nw",
+			noColumns: 2,
+			backgroundOpacity: 0.2
+		},
+		yaxis: {
+			tickFormatter: function(val) { return val + ""; }
+		},
+		xaxis: {
+			tickFormatter: function(val) { return val + "s"; }
+		},
+		selection: {
+			mode: "x"
+		},
+		series: {
+			stack: 0,
+			lines: {
+				show: true,
+				fill:true,
+				lineWidth: 0,
+			},
+		},
+	};
+
 	$(document).ready(function() {
 		var datagraph = $.plot("#datagraph", datagraph_data, datagraph_options);
 		var clockgraph = $.plot("#clockgraph", clockgraph_data, timingsgraph_options);
 		var cpugraph = $.plot("#cpugraph", cpugraph_data, timingsgraph_options);
+		var goroutinegraph = $.plot("#goroutinegraph", goroutinegraph_data, numgraph_options);
 
 		var overview = $.plot("#overview", {}, {
 			legend: { show: false},
@@ -123,6 +155,8 @@ const (
 			overview.setSelection(ranges, true);
 			clockgraph.setSelection(ranges, true);
 			cpugraph.setSelection(ranges, true);
+			goroutinegraph.setSelection(ranges);
+			
 		});
 
 		$("#clockgraph").bind("plotselected", function (event, ranges) {
@@ -142,6 +176,8 @@ const (
 			overview.setSelection(ranges, true);
 			datagraph.setSelection(ranges, true);
 			cpugraph.setSelection(ranges, true);
+			goroutinegraph.setSelection(ranges);
+
 		});
 
 		$("#cpugraph").bind("plotselected", function (event, ranges) {
@@ -161,12 +197,34 @@ const (
 			overview.setSelection(ranges, true);
 			datagraph.setSelection(ranges, true);
 			clockraph.setSelection(ranges, true);
+			goroutinegraph.setSelection(ranges);
+		});
+
+		$("#goroutinegraph").bind("plotselected", function (event, ranges) {
+			
+			// do the zooming
+			$.each(goroutinegraph.getXAxes(), function(_, axis) {
+				var opts = axis.options;
+				opts.min = ranges.xaxis.from;
+				opts.max = ranges.xaxis.to;
+			});
+			goroutinegraph.setupGrid();
+			goroutinegraph.draw();
+			goroutinegraph.clearSelection();
+
+			// don't fire event on the overview to prevent eternal loop
+
+			overview.setSelection(ranges, true);
+			datagraph.setSelection(ranges, true);
+			clockraph.setSelection(ranges, true);
+			cpugraph.setSelection(ranges, true);
 		});
 
 		$("#overview").bind("plotselected", function (event, ranges) {
 			datagraph.setSelection(ranges);
 			clockgraph.setSelection(ranges);
 			cpugraph.setSelection(ranges);
+			goroutinegraph.setSelection(ranges);
 		});
 
 		// refresh data every second
@@ -194,6 +252,9 @@ const (
 					{ label: "con mas idle cpu",   data: graphData.MASIdlecpu },
 					{ label: "STW mark cpu",       data: graphData.STWMcpu },
 				];
+				var goroutinegraph_data = [
+					{ label:  "Goroutine count", data: graphData.GoroutineCount },
+				];
 
 				datagraph.setData(datagraph_data);
 				datagraph.setupGrid();
@@ -206,6 +267,10 @@ const (
 				cpugraph.setData(cpugraph_data);
 				cpugraph.setupGrid();
 				cpugraph.draw();
+
+				goroutinegraph.setData(goroutinegraph_data);
+				goroutinegraph.setupGrid();
+				goroutinegraph.draw();
 
 				overview.setData(datagraph_data);
 				overview.setupGrid();
@@ -317,6 +382,10 @@ dd { margin-left: 160px; }
 		<div id="cpugraph" class="demo-placeholder"></div>
 	</div>
 
+	<div class="small-graph-container">
+		<div id="goroutinegraph" class="demo-placeholder"></div>
+	</div>
+	
 	<div class="legend-container" style="height:60px;">
 		<div id="overview" class="demo-placeholder"></div>
 	</div>
@@ -343,6 +412,8 @@ dd { margin-left: 160px; }
 <dt>con mas bg cpu    </dt><dd>concurrent mark and scan - background GC cpu time</dd>
 <dt>con mas idle cpu  </dt><dd>concurrent mark and scan - idle GC cpu time</dd>
 <dt>STW mark cpu      </dt><dd>stop-the-world mark cpu time</dd>
+
+<dt> Goroutine count </dt><dd>the number of goroutines that currently exist</dd>
 </dl>
 
 </pre>
