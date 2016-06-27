@@ -74,6 +74,8 @@ func main() {
 			gcvisGraph.AddGCTraceGraphPoint(gcTrace)
 		case scvgTrace := <-parser.ScvgChan:
 			gcvisGraph.AddScavengerGraphPoint(scvgTrace)
+		case goroutine := <-parser.GoChan:
+			gcvisGraph.AddGoroutineGraphPoint(goroutine)
 		case output := <-parser.NoMatchChan:
 			fmt.Fprintln(os.Stderr, output)
 		case <-parser.done:

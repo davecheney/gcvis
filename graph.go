@@ -1,8 +1,10 @@
 package main
 
 import (
+	"fmt"
 	"html/template"
 	"io"
+	"strconv"
 	"sync"
 	"time"
 )
@@ -21,6 +23,7 @@ type Graph struct {
 	MASBGcpu                            []graphPoints
 	MASIdlecpu                          []graphPoints
 	STWMcpu                             []graphPoints
+	GoroutineCount                      []graphPoints
 	Tmpl                                *template.Template `json:"-"`
 	mu                                  sync.RWMutex       `json:"-"`
 }
@@ -29,21 +32,22 @@ var StartTime = time.Now()
 
 func NewGraph(title, tmpl string) Graph {
 	g := Graph{
-		Title:        title,
-		HeapUse:      []graphPoints{},
-		ScvgInuse:    []graphPoints{},
-		ScvgIdle:     []graphPoints{},
-		ScvgSys:      []graphPoints{},
-		ScvgReleased: []graphPoints{},
-		ScvgConsumed: []graphPoints{},
-		STWSclock:    []graphPoints{},
-		MASclock:     []graphPoints{},
-		STWMclock:    []graphPoints{},
-		STWScpu:      []graphPoints{},
-		MASAssistcpu: []graphPoints{},
-		MASBGcpu:     []graphPoints{},
-		MASIdlecpu:   []graphPoints{},
-		STWMcpu:      []graphPoints{},
+		Title:          title,
+		HeapUse:        []graphPoints{},
+		ScvgInuse:      []graphPoints{},
+		ScvgIdle:       []graphPoints{},
+		ScvgSys:        []graphPoints{},
+		ScvgReleased:   []graphPoints{},
+		ScvgConsumed:   []graphPoints{},
+		STWSclock:      []graphPoints{},
+		MASclock:       []graphPoints{},
+		STWMclock:      []graphPoints{},
+		STWScpu:        []graphPoints{},
+		MASAssistcpu:   []graphPoints{},
+		MASBGcpu:       []graphPoints{},
+		MASIdlecpu:     []graphPoints{},
+		STWMcpu:        []graphPoints{},
+		GoroutineCount: []graphPoints{},
 	}
 	g.setTmpl(tmpl)
 
@@ -94,4 +98,13 @@ func (g *Graph) AddScavengerGraphPoint(scvg *scvgtrace) {
 	g.ScvgSys = append(g.ScvgSys, graphPoints{elapsedTime, float64(scvg.sys)})
 	g.ScvgReleased = append(g.ScvgReleased, graphPoints{elapsedTime, float64(scvg.released)})
 	g.ScvgConsumed = append(g.ScvgConsumed, graphPoints{elapsedTime, float64(scvg.consumed)})
+}
+
+func (g *Graph) AddGoroutineGraphPoint(grt *goroutine) {
+	g.mu.RLock()
+	defer g.mu.RUnlock()
+	elapsedTime := time.Now().Sub(StartTime).Seconds()
+	etStr := fmt.Sprintf("%.3f", elapsedTime)
+	elapsedTime, _ = strconv.ParseFloat(etStr, 64)
+	g.GoroutineCount = append(g.GoroutineCount, graphPoints{elapsedTime, float64(grt.count)})
 }

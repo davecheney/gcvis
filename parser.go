@@ -13,6 +13,7 @@ const (
 	GCRegexpGo16 = `gc #?\d+ @(?P<ElapsedTime>[\d.]+)s \d+%: (?P<STWSclock>[^+]+)\+(?P<MASclock>[^+]+)\+(?P<STWMclock>[^+]+) ms clock, (?P<STWScpu>[^+]+)\+(?P<MASAssistcpu>[^+]+)/(?P<MASBGcpu>[^+]+)/(?P<MASIdlecpu>[^+]+)\+(?P<STWMcpu>[^+]+) ms cpu, \d+->\d+->\d+ MB, (?P<Heap1>\d+) MB goal, \d+ P`
 
 	SCVGRegexp = `scvg\d+: inuse: (?P<inuse>\d+), idle: (?P<idle>\d+), sys: (?P<sys>\d+), released: (?P<released>\d+), consumed: (?P<consumed>\d+) \(MB\)`
+	GoRegexp   = `goroutine count: (?P<count>\d+)`
 )
 
 var (
@@ -20,12 +21,14 @@ var (
 	gcrego15 = regexp.MustCompile(GCRegexpGo15)
 	gcrego16 = regexp.MustCompile(GCRegexpGo16)
 	scvgre   = regexp.MustCompile(SCVGRegexp)
+	gore     = regexp.MustCompile(GoRegexp)
 )
 
 type Parser struct {
 	reader      io.Reader
 	GcChan      chan *gctrace
 	ScvgChan    chan *scvgtrace
+	GoChan      chan *goroutine
 	NoMatchChan chan string
 	done        chan bool
 
@@ -39,6 +42,7 @@ func NewParser(r io.Reader) *Parser {
 		reader:      r,
 		GcChan:      make(chan *gctrace, 1),
 		ScvgChan:    make(chan *scvgtrace, 1),
+		GoChan:      make(chan *goroutine, 1),
 		NoMatchChan: make(chan string, 1),
 		done:        make(chan bool),
 	}
@@ -66,6 +70,11 @@ func (p *Parser) Run() {
 
 		if result := scvgre.FindStringSubmatch(line); result != nil {
 			p.ScvgChan <- parseSCVGTrace(result)
+			continue
+		}
+
+		if result := gore.FindStringSubmatch(line); result != nil {
+			p.GoChan <- parseGo(result)
 			continue
 		}
 
@@ -103,6 +112,14 @@ func parseSCVGTrace(matches []string) *scvgtrace {
 		sys:      silentParseInt(matchMap["sys"]),
 		released: silentParseInt(matchMap["released"]),
 		consumed: silentParseInt(matchMap["consumed"]),
+	}
+}
+
+func parseGo(matches []string) *goroutine {
+	matchMap := getMatchMap(gore, matches)
+
+	return &goroutine{
+		count: silentParseInt(matchMap["count"]),
 	}
 }
 
