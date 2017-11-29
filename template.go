@@ -51,6 +51,18 @@ const (
 		{ label: "con mas idle cpu", data: {{ .MASIdlecpu }} },
 		{ label: "STW mark cpu", data: {{ .STWMcpu }} },
 	];
+	var accum_clockgraph_data = [
+		{ label: "STW sweep clock", data: {{ .AccumSTWSclock }} },
+		{ label: "con mas clock", data: {{ .AccumMASclock }} },
+		{ label: "STW mark clock", data: {{ .AccumSTWMclock }} },
+	];
+	var accum_cpugraph_data = [
+		{ label: "STW sweep cpu", data: {{ .AccumSTWScpu }} },
+		{ label: "con mas assist cpu", data: {{ .AccumMASAssistcpu }} },
+		{ label: "con mas bg cpu", data: {{ .AccumMASBGcpu }} },
+		{ label: "con mas idle cpu", data: {{ .AccumMASIdlecpu }} },
+		{ label: "STW mark cpu", data: {{ .AccumSTWMcpu }} },
+	];
 
 	var timingsgraph_options = {
 		legend: {
@@ -78,9 +90,11 @@ const (
 	};
 
 	$(document).ready(function() {
-		var datagraph = $.plot("#datagraph", datagraph_data, datagraph_options);
-		var clockgraph = $.plot("#clockgraph", clockgraph_data, timingsgraph_options);
-		var cpugraph = $.plot("#cpugraph", cpugraph_data, timingsgraph_options);
+		var datagraph       = $.plot("#datagraph",       datagraph_data, datagraph_options);
+		var clockgraph      = $.plot("#clockgraph",      clockgraph_data, timingsgraph_options);
+		var accumclockgraph = $.plot("#accumclockgraph", accum_clockgraph_data, timingsgraph_options);
+		var cpugraph        = $.plot("#cpugraph",        cpugraph_data, timingsgraph_options);
+		var accumcpugraph   = $.plot("#accumcpugraph",   accum_cpugraph_data, timingsgraph_options);
 
 		var overview = $.plot("#overview", {}, {
 			legend: { show: false},
@@ -106,67 +120,51 @@ const (
 			}
 		});
 
-		// now connect the four
-		$("#datagraph").bind("plotselected", function (event, ranges) {
-
+		function updateZoom(g, ranges) {
 			// do the zooming
-			$.each(datagraph.getXAxes(), function(_, axis) {
+			$.each(g.getXAxes(), function(_, axis) {
 				var opts = axis.options;
 				opts.min = ranges.xaxis.from;
 				opts.max = ranges.xaxis.to;
 			});
-			datagraph.setupGrid();
-			datagraph.draw();
-			datagraph.clearSelection();
+			g.setupGrid();
+			g.draw();
+			g.clearSelection();
+			updateRanges(g, ranges);
+		}
 
-			// don't fire event on the overview to prevent eternal loop
-			overview.setSelection(ranges, true);
-			clockgraph.setSelection(ranges, true);
-			cpugraph.setSelection(ranges, true);
+		function updateRanges(g, ranges) {
+			if (g !== overview) { overview.setSelection(ranges, true); }
+			if (g !== datagraph) { datagraph.setSelection(ranges, true); }
+			if (g !== clockgraph) { clockgraph.setSelection(ranges, true); }
+			if (g !== accumclockgraph) { accumclockgraph.setSelection(ranges, true); }
+			if (g !== cpugraph) { cpugraph.setSelection(ranges, true); }
+			if (g !== accumcpugraph) { accumcpugraph.setSelection(ranges, true); }
+		}
+
+		// now connect everything
+		$("#datagraph").bind("plotselected", function (event, ranges) {
+			updateZoom(datagraph, ranges);
 		});
 
 		$("#clockgraph").bind("plotselected", function (event, ranges) {
+			updateZoom(clockgraph, ranges);
+		});
 
-			// do the zooming
-			$.each(clockgraph.getXAxes(), function(_, axis) {
-				var opts = axis.options;
-				opts.min = ranges.xaxis.from;
-				opts.max = ranges.xaxis.to;
-			});
-			clockgraph.setupGrid();
-			clockgraph.draw();
-			clockgraph.clearSelection();
-
-			// don't fire event on the overview to prevent eternal loop
-
-			overview.setSelection(ranges, true);
-			datagraph.setSelection(ranges, true);
-			cpugraph.setSelection(ranges, true);
+		$("#accumclockgraph").bind("plotselected", function (event, ranges) {
+			updateZoom(accumclockgraph, ranges);
 		});
 
 		$("#cpugraph").bind("plotselected", function (event, ranges) {
+			updateZoom(cpugraph, ranges);
+		});
 
-			// do the zooming
-			$.each(cpugraph.getXAxes(), function(_, axis) {
-				var opts = axis.options;
-				opts.min = ranges.xaxis.from;
-				opts.max = ranges.xaxis.to;
-			});
-			cpugraph.setupGrid();
-			cpugraph.draw();
-			cpugraph.clearSelection();
-
-			// don't fire event on the overview to prevent eternal loop
-
-			overview.setSelection(ranges, true);
-			datagraph.setSelection(ranges, true);
-			clockraph.setSelection(ranges, true);
+		$("#accumcpugraph").bind("plotselected", function (event, ranges) {
+			updateZoom(accumcpugraph, ranges);
 		});
 
 		$("#overview").bind("plotselected", function (event, ranges) {
-			datagraph.setSelection(ranges);
-			clockgraph.setSelection(ranges);
-			cpugraph.setSelection(ranges);
+			updateRanges(overview, ranges);
 		});
 
 		// refresh data every second
@@ -187,12 +185,24 @@ const (
 					{ label: "con mas clock",      data: graphData.MASclock },
 					{ label: "STW mark clock",     data: graphData.STWMclock },
 				];
+				var accum_clockgraph_data = [
+					{ label: "Accumulated STW sweep clock",    data: graphData.AccumSTWSclock },
+					{ label: "Accumulated con mas clock",      data: graphData.AccumMASclock },
+					{ label: "Accumulated STW mark clock",     data: graphData.AccumSTWMclock },
+				];
 				var cpugraph_data = [
 					{ label: "STW sweep cpu",      data: graphData.STWScpu },
 					{ label: "con mas assist cpu", data: graphData.MASAssistcpu },
 					{ label: "con mas bg cpu",     data: graphData.MASBGcpu },
 					{ label: "con mas idle cpu",   data: graphData.MASIdlecpu },
 					{ label: "STW mark cpu",       data: graphData.STWMcpu },
+				];
+				var accum_cpugraph_data = [
+					{ label: "Accumulated STW sweep cpu",      data: graphData.AccumSTWScpu },
+					{ label: "Accumulated con mas assist cpu", data: graphData.AccumMASAssistcpu },
+					{ label: "Accumulated con mas bg cpu",     data: graphData.AccumMASBGcpu },
+					{ label: "Accumulated con mas idle cpu",   data: graphData.AccumMASIdlecpu },
+					{ label: "Accumulated STW mark cpu",       data: graphData.AccumSTWMcpu },
 				];
 
 				datagraph.setData(datagraph_data);
@@ -203,9 +213,17 @@ const (
 				clockgraph.setupGrid();
 				clockgraph.draw();
 
+				accumclockgraph.setData(accum_clockgraph_data);
+				accumclockgraph.setupGrid();
+				accumclockgraph.draw();
+
 				cpugraph.setData(cpugraph_data);
 				cpugraph.setupGrid();
 				cpugraph.draw();
+
+				accumcpugraph.setData(accum_cpugraph_data);
+				accumcpugraph.setupGrid();
+				accumcpugraph.draw();
 
 				overview.setData(datagraph_data);
 				overview.setupGrid();
@@ -314,7 +332,14 @@ dd { margin-left: 160px; }
 	</div>
 
 	<div class="small-graph-container">
+		<div id="accumclockgraph" class="demo-placeholder"></div>
+	</div>
+	<div class="small-graph-container">
 		<div id="cpugraph" class="demo-placeholder"></div>
+	</div>
+
+	<div class="small-graph-container">
+		<div id="accumcpugraph" class="demo-placeholder"></div>
 	</div>
 
 	<div class="legend-container" style="height:60px;">
