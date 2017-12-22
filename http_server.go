@@ -40,7 +40,7 @@ func (h *HttpServer) Start() {
 		w.Header().Set("Content-Type", "application/json")
 		encoder := json.NewEncoder(w)
 		if err := encoder.Encode(h.graph); err != nil {
-			log.Fatal("An error occurred while serving JSON endpoint: %v", err)
+			log.Fatalf("An error occurred while serving JSON endpoint: %v", err)
 		}
 	})
 
