@@ -22,7 +22,7 @@ type Graph struct {
 	MASIdlecpu                          []graphPoints
 	STWMcpu                             []graphPoints
 	Tmpl                                *template.Template `json:"-"`
-	mu                                  sync.RWMutex       `json:"-"`
+	mu                                  *sync.RWMutex       `json:"-"`
 }
 
 var StartTime = time.Now()
