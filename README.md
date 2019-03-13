@@ -1,3 +1,10 @@
+<hr />
+
+# This project is no longer maintained
+
+I'm sorry but I do not have the bandwidth to maintain this tool. Please do not send issues or PRs. Thank you.
+<hr />
+
 # gcvis
 
 Visualise Go program gctrace data in real time
